@@ -41,15 +41,29 @@
 
 			.custom-pos-list-header {
 				position: sticky;
-				top: 0;
+				top: -1px;
 				background: var(--bg-color);
-				z-index: 20;
+				z-index: 200;
 				font-size: var(--text-xs);
 				font-weight: 600;
 				text-transform: uppercase;
 				letter-spacing: 0.02em;
 				border-bottom: 1px solid var(--border-color);
 				box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+				margin-top: 0 !important;
+				isolation: isolate;
+			}
+
+			.custom-pos-list-header::before {
+				content: "";
+				position: absolute;
+				left: 0;
+				right: 0;
+				top: -6px;
+				height: 6px;
+				background: var(--bg-color);
+				pointer-events: none;
+				z-index: -1;
 			}
 
 			.custom-pos-list-item {
@@ -127,17 +141,14 @@
 				align-items: center;
 				gap: 4px;
 				padding: 2px;
-				margin-left: 8px;
+				margin-left: 4px;
 				border: 1px solid var(--border-color);
 				border-radius: 8px;
 				background: var(--subtle-fg);
 			}
 
-			.custom-pos-toolbar-row {
-				display: flex;
-				align-items: center;
-				gap: 8px;
-				flex-wrap: nowrap;
+			.items-container.custom-pos-list-view > .custom-pos-list-header {
+				margin-top: 0 !important;
 			}
 
 			.custom-pos-view-switch .view-btn {
@@ -341,29 +352,22 @@
 		const $root = getSelectorRoot(instance);
 		if (!$root?.length) return null;
 
-		const $searchInput = $root
-			.find('input[placeholder*="Search by item"], input[placeholder*="search"], input[placeholder*="Search"]')
+		const $itemGroupControl = $root
+			.find(
+				'[data-fieldname="item_group"], .item-group-field, .frappe-control[data-fieldname="item_group"], input[placeholder*="item group"], input[placeholder*="Item group"]'
+			)
 			.first();
-		const $groupInput = $root.find(
-			'.item-group-field input, .item-group-field select, [data-fieldname="item_group"] input, [data-fieldname="item_group"] select, input[placeholder*="item group"], input[placeholder*="Item group"]'
-		).first();
-		if ($groupInput.length) {
-			const searchEl = $searchInput.get(0);
-			const parents = $groupInput.parents().toArray();
-			for (const parent of parents) {
-				if (!searchEl || parent.contains(searchEl)) {
-					return $(parent);
-				}
-			}
-
-			const $anchor = $groupInput.closest(".item-group-field, .frappe-control, .form-group, .control-input-wrapper, .col");
-			if ($anchor.length) return $anchor;
+		if ($itemGroupControl.length) {
+			const $controlWrap = $itemGroupControl.closest(
+				'.frappe-control, .item-group-field, .form-group, .control-input-wrapper, .col, [data-fieldname="item_group"]'
+			);
+			if ($controlWrap.length) return $controlWrap;
+			return $itemGroupControl;
 		}
 
-		const $searchRow = $root.find(".item-search, .search-field, .items-selector-header, .item-selector-header").first();
+		const $searchRow = $root.find(".items-selector-header, .item-selector-header, .item-search").first();
 		if ($searchRow.length) return $searchRow;
-
-		return instance?.$items_container;
+		return null;
 	}
 
 	function ensureViewToggle(instance) {
@@ -381,9 +385,8 @@
 					<button type="button" class="view-btn view-btn-list" title="${__("List view")}" aria-label="${__("List view")}">≡</button>
 				</div>`
 			);
-			$anchor.append($wrap);
+			$anchor.after($wrap);
 		}
-		$anchor.addClass("custom-pos-toolbar-row");
 
 		const viewMode = getCurrentViewMode(instance);
 		const $gridBtn = $wrap.find(".view-btn-grid");
@@ -449,7 +452,6 @@
 		if (!$container?.length) return;
 		const $root = getSelectorRoot(instance) || $container.parent();
 		$root.find(".custom-pos-view-switch").remove();
-		$root.find(".custom-pos-toolbar-row").removeClass("custom-pos-toolbar-row");
 		$container.parent().find(".custom-pos-pagination-wrap").remove();
 	}
 
@@ -556,7 +558,6 @@
 				this.$items_container.removeClass("items-not-found");
 			}
 
-			this.$items_container.removeClass("hide-item-image show-item-image");
 			this.$items_container.addClass("custom-pos-list-view");
 			this.$items_container.append(this.render_item_list_column_header());
 
