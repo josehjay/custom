@@ -25,6 +25,8 @@
 				flex-direction: column;
 				gap: 0;
 				padding: 0;
+				position: relative;
+				isolation: isolate;
 			}
 
 			.custom-pos-list-header,
@@ -40,12 +42,14 @@
 			.custom-pos-list-header {
 				position: sticky;
 				top: 0;
-				background: var(--subtle-fg);
-				z-index: 1;
+				background: var(--bg-color);
+				z-index: 20;
 				font-size: var(--text-xs);
 				font-weight: 600;
 				text-transform: uppercase;
 				letter-spacing: 0.02em;
+				border-bottom: 1px solid var(--border-color);
+				box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
 			}
 
 			.custom-pos-list-item {
