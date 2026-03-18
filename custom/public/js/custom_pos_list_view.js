@@ -6,6 +6,10 @@
 	const MAX_WAIT_MS = 20000;
 	const VIEW_MODE_KEY = "__custom_pos_view_mode";
 	const LAST_ITEMS_KEY = "__custom_pos_last_items";
+	const ITEMS_SIGNATURE_KEY = "__custom_pos_items_signature";
+	const CURRENT_PAGE_KEY = "__custom_pos_current_page";
+	const PAGE_SIZE_KEY = "__custom_pos_page_size";
+	const DEFAULT_PAGE_SIZE = 40;
 
 	function injectStyles() {
 		if (document.getElementById(STYLE_ID)) return;
@@ -23,7 +27,7 @@
 			.custom-pos-list-header,
 			.custom-pos-list-item {
 				display: grid;
-				grid-template-columns: 64px minmax(220px, 1fr) minmax(110px, 0.6fr) minmax(90px, 0.4fr) minmax(130px, 0.5fr);
+				grid-template-columns: 56px minmax(320px, 2.2fr) minmax(100px, 0.7fr) minmax(70px, 0.45fr) minmax(100px, 0.65fr);
 				align-items: center;
 				column-gap: 10px;
 				padding: 8px 10px;
@@ -106,7 +110,7 @@
 			@media (max-width: 1200px) {
 				.custom-pos-list-header,
 				.custom-pos-list-item {
-					grid-template-columns: 56px minmax(180px, 1fr) minmax(95px, 0.6fr) minmax(80px, 0.35fr) minmax(100px, 0.4fr);
+					grid-template-columns: 52px minmax(240px, 2fr) minmax(90px, 0.7fr) minmax(60px, 0.45fr) minmax(90px, 0.6fr);
 					column-gap: 8px;
 				}
 			}
@@ -117,6 +121,29 @@
 				padding: 6px 8px;
 				background: var(--subtle-fg);
 				border-bottom: 1px solid var(--border-color);
+			}
+
+			.custom-pos-view-toggle-inline {
+				display: inline-flex;
+				align-items: center;
+				margin-left: 8px;
+			}
+
+			.custom-pos-pagination-wrap {
+				display: flex;
+				align-items: center;
+				justify-content: flex-end;
+				gap: 8px;
+				padding: 8px 10px;
+				border-top: 1px solid var(--border-color);
+				background: var(--subtle-fg);
+			}
+
+			.custom-pos-pagination-wrap .page-info {
+				font-size: var(--text-sm);
+				color: var(--text-muted);
+				min-width: 140px;
+				text-align: center;
 			}
 		`;
 
@@ -166,7 +193,7 @@
 
 	function getCurrentViewMode(instance) {
 		if (instance?.[VIEW_MODE_KEY] !== "grid" && instance?.[VIEW_MODE_KEY] !== "list") {
-			instance[VIEW_MODE_KEY] = isCustomListEnabled(instance) ? "list" : "grid";
+			instance[VIEW_MODE_KEY] = "grid";
 		}
 		return instance[VIEW_MODE_KEY];
 	}
@@ -175,21 +202,86 @@
 		instance[VIEW_MODE_KEY] = mode === "grid" ? "grid" : "list";
 	}
 
+	function getCurrentPage(instance) {
+		if (!Number.isInteger(instance?.[CURRENT_PAGE_KEY]) || instance[CURRENT_PAGE_KEY] < 1) {
+			instance[CURRENT_PAGE_KEY] = 1;
+		}
+		return instance[CURRENT_PAGE_KEY];
+	}
+
+	function setCurrentPage(instance, page) {
+		const nextPage = Number.isInteger(page) && page > 0 ? page : 1;
+		instance[CURRENT_PAGE_KEY] = nextPage;
+	}
+
+	function getPageSize(instance) {
+		if (!Number.isInteger(instance?.[PAGE_SIZE_KEY]) || instance[PAGE_SIZE_KEY] < 1) {
+			instance[PAGE_SIZE_KEY] = DEFAULT_PAGE_SIZE;
+		}
+		return instance[PAGE_SIZE_KEY];
+	}
+
+	function buildItemsSignature(items) {
+		const firstCode = items?.[0]?.item_code || "";
+		const lastCode = items?.[items.length - 1]?.item_code || "";
+		return `${items?.length || 0}:${firstCode}:${lastCode}`;
+	}
+
+	function getPaginatedItems(instance, items) {
+		const pageSize = getPageSize(instance);
+		const totalItems = items.length;
+		const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+		const safePage = Math.min(getCurrentPage(instance), totalPages);
+		setCurrentPage(instance, safePage);
+		const start = (safePage - 1) * pageSize;
+		return {
+			pageItems: items.slice(start, start + pageSize),
+			totalPages,
+			currentPage: safePage,
+			totalItems,
+		};
+	}
+
+	function getSelectorRoot(instance) {
+		const $container = instance?.$items_container;
+		if (!$container?.length) return null;
+		const $root = $container.closest(".items-selector, .item-selector, .point-of-sale-app");
+		return $root.length ? $root : $container.parent();
+	}
+
+	function findToggleAnchor(instance) {
+		const $root = getSelectorRoot(instance);
+		if (!$root?.length) return null;
+
+		const $groupInput = $root.find(
+			'.item-group-field input, .item-group-field select, input[placeholder*="item group"], input[placeholder*="Item group"]'
+		).first();
+		if ($groupInput.length) {
+			const $anchor = $groupInput.closest(".item-group-field, .frappe-control, .form-group, .control-input-wrapper, .col");
+			if ($anchor.length) return $anchor;
+		}
+
+		const $searchRow = $root.find(".item-search, .search-field, .items-selector-header, .item-selector-header").first();
+		if ($searchRow.length) return $searchRow;
+
+		return instance?.$items_container;
+	}
+
 	function ensureViewToggle(instance) {
 		const $container = instance?.$items_container;
 		if (!$container?.length) return;
 
-		const $parent = $container.parent();
-		if (!$parent?.length) return;
-
-		let $wrap = $parent.find(".custom-pos-view-toggle-wrap");
+		const $anchor = findToggleAnchor(instance);
+		if (!$anchor?.length) return;
+		const $root = getSelectorRoot(instance) || $container.parent();
+		let $wrap = $root.find(".custom-pos-view-toggle-inline");
 		if (!$wrap.length) {
 			$wrap = $(
-				`<div class="custom-pos-view-toggle-wrap">
+				`<div class="custom-pos-view-toggle-inline">
 					<button type="button" class="btn btn-xs btn-secondary custom-pos-view-toggle-btn"></button>
 				</div>`
 			);
-			$container.before($wrap);
+			$anchor.after($wrap);
 		}
 
 		const viewMode = getCurrentViewMode(instance);
@@ -204,6 +296,49 @@
 		});
 	}
 
+	function ensurePaginationControls(instance, totalItems, totalPages, currentPage) {
+		const $container = instance?.$items_container;
+		if (!$container?.length) return;
+
+		const $parent = $container.parent();
+		if (!$parent?.length) return;
+
+		let $pager = $parent.find(".custom-pos-pagination-wrap");
+		if (!$pager.length) {
+			$pager = $(
+				`<div class="custom-pos-pagination-wrap">
+					<button type="button" class="btn btn-xs btn-default custom-pos-prev-page">${__("Previous")}</button>
+					<span class="page-info"></span>
+					<button type="button" class="btn btn-xs btn-default custom-pos-next-page">${__("Next")}</button>
+				</div>`
+			);
+			$container.after($pager);
+		}
+
+		$pager.find(".page-info").text(__("Page {0} of {1} ({2} items)", [currentPage, totalPages, totalItems]));
+		$pager.find(".custom-pos-prev-page").prop("disabled", currentPage <= 1);
+		$pager.find(".custom-pos-next-page").prop("disabled", currentPage >= totalPages);
+
+		$pager.find(".custom-pos-prev-page").off("click.customPosPager").on("click.customPosPager", () => {
+			setCurrentPage(instance, Math.max(1, getCurrentPage(instance) - 1));
+			instance.render_item_list(instance[LAST_ITEMS_KEY] || []);
+		});
+		$pager.find(".custom-pos-next-page").off("click.customPosPager").on("click.customPosPager", () => {
+			setCurrentPage(instance, getCurrentPage(instance) + 1);
+			instance.render_item_list(instance[LAST_ITEMS_KEY] || []);
+		});
+
+		$pager.toggle(totalPages > 1);
+	}
+
+	function removeCustomControls(instance) {
+		const $container = instance?.$items_container;
+		if (!$container?.length) return;
+		const $root = getSelectorRoot(instance) || $container.parent();
+		$root.find(".custom-pos-view-toggle-inline").remove();
+		$container.parent().find(".custom-pos-pagination-wrap").remove();
+	}
+
 	function patchItemSelector() {
 		const ItemSelector = erpnext?.PointOfSale?.ItemSelector;
 		if (!ItemSelector || !ItemSelector.prototype) return false;
@@ -215,6 +350,10 @@
 		const originalRenderItemList = ItemSelector.prototype.render_item_list;
 
 		ItemSelector.prototype.render_item_list_column_header = function () {
+			if (getCurrentViewMode(this) === "grid" && originalRenderItemListColumnHeader) {
+				return originalRenderItemListColumnHeader.call(this);
+			}
+
 			return `
 				<div class="custom-pos-list-header">
 					<div>${__("Image")}</div>
@@ -227,6 +366,10 @@
 		};
 
 		ItemSelector.prototype.get_item_html = function (item) {
+			if (getCurrentViewMode(this) === "grid" && originalGetItemHtml) {
+				return originalGetItemHtml.call(this, item);
+			}
+
 			const { serial_no, batch_no } = item;
 			const uom = item.uom || item.stock_uom || "";
 			const priceListRate = item.price_list_rate || 0;
@@ -261,16 +404,33 @@
 		};
 
 		ItemSelector.prototype.render_item_list = function (items) {
-			this[LAST_ITEMS_KEY] = items || [];
+			const safeItems = items || [];
+			this[LAST_ITEMS_KEY] = safeItems;
+
+			if (!isCustomListEnabled(this) && originalRenderItemList) {
+				removeCustomControls(this);
+				this.$items_container.removeClass("custom-pos-list-view");
+				return originalRenderItemList.call(this, safeItems);
+			}
+
+			const nextSignature = buildItemsSignature(safeItems);
+			if (this[ITEMS_SIGNATURE_KEY] !== nextSignature) {
+				setCurrentPage(this, 1);
+				this[ITEMS_SIGNATURE_KEY] = nextSignature;
+			}
+
 			ensureViewToggle(this);
+			const { pageItems, totalPages, currentPage, totalItems } = getPaginatedItems(this, safeItems);
+			ensurePaginationControls(this, totalItems, totalPages, currentPage);
+
 			if (getCurrentViewMode(this) === "grid" && originalRenderItemList) {
 				this.$items_container.removeClass("custom-pos-list-view");
-				return originalRenderItemList.call(this, items);
+				return originalRenderItemList.call(this, pageItems);
 			}
 
 			this.$items_container.html("");
 
-			if (!items?.length) {
+			if (!pageItems.length) {
 				if (this.set_items_not_found_banner) this.set_items_not_found_banner();
 				return;
 			}
@@ -283,7 +443,7 @@
 			this.$items_container.addClass("custom-pos-list-view");
 			this.$items_container.append(this.render_item_list_column_header());
 
-			items.forEach((item) => {
+			pageItems.forEach((item) => {
 				this.$items_container.append(this.get_item_html(item));
 			});
 		};
