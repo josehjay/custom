@@ -11,7 +11,7 @@
 	const PAGE_SIZE_KEY = "__custom_pos_page_size";
 	const ENABLE_STATE_KEY = "__custom_pos_enable_state";
 	const ENABLE_FETCH_PROMISE_KEY = "__custom_pos_enable_fetch_promise";
-	const DEFAULT_PAGE_SIZE = 40;
+	const DEFAULT_PAGE_SIZE = 24;
 	const profileEnableCache = {};
 
 	function injectStyles() {
@@ -118,25 +118,41 @@
 				}
 			}
 
-			.custom-pos-view-toggle-wrap {
-				display: flex;
-				justify-content: flex-end;
-				padding: 6px 8px;
-				background: var(--subtle-fg);
-				border-bottom: 1px solid var(--border-color);
-			}
-
-			.custom-pos-view-toggle-inline {
+			.custom-pos-view-switch {
 				display: inline-flex;
 				align-items: center;
+				gap: 4px;
+				padding: 2px;
 				margin-left: 8px;
+				border: 1px solid var(--border-color);
+				border-radius: 8px;
+				background: var(--subtle-fg);
 			}
 
 			.custom-pos-toolbar-row {
 				display: flex;
 				align-items: center;
 				gap: 8px;
-				flex-wrap: wrap;
+				flex-wrap: nowrap;
+			}
+
+			.custom-pos-view-switch .view-btn {
+				width: 30px;
+				height: 28px;
+				display: inline-flex;
+				align-items: center;
+				justify-content: center;
+				border: 0;
+				border-radius: 6px;
+				background: transparent;
+				color: var(--text-muted);
+				font-size: 14px;
+				cursor: pointer;
+			}
+
+			.custom-pos-view-switch .view-btn.is-active {
+				background: var(--primary);
+				color: #fff;
 			}
 
 			.custom-pos-pagination-wrap {
@@ -147,6 +163,9 @@
 				padding: 8px 10px;
 				border-top: 1px solid var(--border-color);
 				background: var(--subtle-fg);
+				position: sticky;
+				bottom: 0;
+				z-index: 2;
 			}
 
 			.custom-pos-pagination-wrap .page-info {
@@ -350,25 +369,32 @@
 		const $anchor = findToggleAnchor(instance);
 		if (!$anchor?.length) return;
 		const $root = getSelectorRoot(instance) || $container.parent();
-		let $wrap = $root.find(".custom-pos-view-toggle-inline");
+		let $wrap = $root.find(".custom-pos-view-switch");
 		if (!$wrap.length) {
 			$wrap = $(
-				`<div class="custom-pos-view-toggle-inline">
-					<button type="button" class="btn btn-xs btn-secondary custom-pos-view-toggle-btn"></button>
+				`<div class="custom-pos-view-switch" role="group" aria-label="${__("View mode")}">
+					<button type="button" class="view-btn view-btn-grid" title="${__("Grid view")}" aria-label="${__("Grid view")}">▦</button>
+					<button type="button" class="view-btn view-btn-list" title="${__("List view")}" aria-label="${__("List view")}">≡</button>
 				</div>`
 			);
-			$anchor.after($wrap);
+			$anchor.append($wrap);
 		}
 		$anchor.addClass("custom-pos-toolbar-row");
 
 		const viewMode = getCurrentViewMode(instance);
-		const isListMode = viewMode === "list";
-		const buttonLabel = isListMode ? __("Switch to Grid View") : __("Switch to List View");
-		const $button = $wrap.find(".custom-pos-view-toggle-btn");
-		$button.text(buttonLabel);
+		const $gridBtn = $wrap.find(".view-btn-grid");
+		const $listBtn = $wrap.find(".view-btn-list");
+		$gridBtn.toggleClass("is-active", viewMode === "grid");
+		$listBtn.toggleClass("is-active", viewMode === "list");
 
-		$button.off("click.customPosViewToggle").on("click.customPosViewToggle", () => {
-			setCurrentViewMode(instance, isListMode ? "grid" : "list");
+		$gridBtn.off("click.customPosViewToggle").on("click.customPosViewToggle", () => {
+			setCurrentViewMode(instance, "grid");
+			setCurrentPage(instance, 1);
+			instance.render_item_list(instance[LAST_ITEMS_KEY] || []);
+		});
+		$listBtn.off("click.customPosViewToggle").on("click.customPosViewToggle", () => {
+			setCurrentViewMode(instance, "list");
+			setCurrentPage(instance, 1);
 			instance.render_item_list(instance[LAST_ITEMS_KEY] || []);
 		});
 	}
@@ -405,7 +431,7 @@
 			instance.render_item_list(instance[LAST_ITEMS_KEY] || []);
 		});
 
-		$pager.toggle(totalPages > 1);
+		$pager.show();
 	}
 
 	function hidePaginationControls(instance) {
@@ -418,7 +444,8 @@
 		const $container = instance?.$items_container;
 		if (!$container?.length) return;
 		const $root = getSelectorRoot(instance) || $container.parent();
-		$root.find(".custom-pos-view-toggle-inline").remove();
+		$root.find(".custom-pos-view-switch").remove();
+		$root.find(".custom-pos-toolbar-row").removeClass("custom-pos-toolbar-row");
 		$container.parent().find(".custom-pos-pagination-wrap").remove();
 	}
 
@@ -505,6 +532,7 @@
 			ensureViewToggle(this);
 
 			if (getCurrentViewMode(this) === "grid" && originalRenderItemList) {
+				this.$items_container.html("");
 				this.$items_container.removeClass("custom-pos-list-view");
 				hidePaginationControls(this);
 				return originalRenderItemList.call(this, safeItems);
