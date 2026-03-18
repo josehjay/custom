@@ -4,6 +4,8 @@
 	const ENABLE_FIELD = "use_custom_list_view_with_images";
 	const POLL_INTERVAL_MS = 200;
 	const MAX_WAIT_MS = 20000;
+	const VIEW_MODE_KEY = "__custom_pos_view_mode";
+	const LAST_ITEMS_KEY = "__custom_pos_last_items";
 
 	function injectStyles() {
 		if (document.getElementById(STYLE_ID)) return;
@@ -108,6 +110,14 @@
 					column-gap: 8px;
 				}
 			}
+
+			.custom-pos-view-toggle-wrap {
+				display: flex;
+				justify-content: flex-end;
+				padding: 6px 8px;
+				background: var(--subtle-fg);
+				border-bottom: 1px solid var(--border-color);
+			}
 		`;
 
 		document.head.appendChild(style);
@@ -148,6 +158,52 @@
 	function isCustomListEnabled(instance) {
 		const value = instance?.settings?.[ENABLE_FIELD];
 		return value === 1 || value === "1" || value === true;
+	}
+
+	function getCurrentViewMode(instance) {
+		if (instance?.[VIEW_MODE_KEY] !== "grid" && instance?.[VIEW_MODE_KEY] !== "list") {
+			instance[VIEW_MODE_KEY] = "list";
+		}
+		return instance[VIEW_MODE_KEY];
+	}
+
+	function setCurrentViewMode(instance, mode) {
+		instance[VIEW_MODE_KEY] = mode === "grid" ? "grid" : "list";
+	}
+
+	function ensureViewToggle(instance) {
+		const $container = instance?.$items_container;
+		if (!$container?.length) return;
+
+		const $parent = $container.parent();
+		if (!$parent?.length) return;
+
+		let $wrap = $parent.find(".custom-pos-view-toggle-wrap");
+		if (!$wrap.length) {
+			$wrap = $(
+				`<div class="custom-pos-view-toggle-wrap">
+					<button type="button" class="btn btn-xs btn-secondary custom-pos-view-toggle-btn"></button>
+				</div>`
+			);
+			$container.before($wrap);
+		}
+
+		const viewMode = getCurrentViewMode(instance);
+		const isListMode = viewMode === "list";
+		const buttonLabel = isListMode ? __("Switch to Grid View") : __("Switch to List View");
+		const $button = $wrap.find(".custom-pos-view-toggle-btn");
+		$button.text(buttonLabel);
+
+		$button.off("click.customPosViewToggle").on("click.customPosViewToggle", () => {
+			setCurrentViewMode(instance, isListMode ? "grid" : "list");
+			instance.render_item_list(instance[LAST_ITEMS_KEY] || []);
+		});
+	}
+
+	function removeViewToggle(instance) {
+		const $container = instance?.$items_container;
+		if (!$container?.length) return;
+		$container.parent().find(".custom-pos-view-toggle-wrap").remove();
 	}
 
 	function patchItemSelector() {
@@ -215,7 +271,16 @@
 		};
 
 		ItemSelector.prototype.render_item_list = function (items) {
+			this[LAST_ITEMS_KEY] = items || [];
+
 			if (!isCustomListEnabled(this) && originalRenderItemList) {
+				removeViewToggle(this);
+				this.$items_container.removeClass("custom-pos-list-view");
+				return originalRenderItemList.call(this, items);
+			}
+
+			ensureViewToggle(this);
+			if (getCurrentViewMode(this) === "grid" && originalRenderItemList) {
 				this.$items_container.removeClass("custom-pos-list-view");
 				return originalRenderItemList.call(this, items);
 			}
