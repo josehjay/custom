@@ -156,13 +156,17 @@
 	}
 
 	function isCustomListEnabled(instance) {
-		const value = instance?.settings?.[ENABLE_FIELD];
+		const value =
+			instance?.settings?.[ENABLE_FIELD] ??
+			instance?.pos_profile?.[ENABLE_FIELD] ??
+			instance?.events?.get_frm?.doc?.[ENABLE_FIELD] ??
+			frappe?.boot?.[ENABLE_FIELD];
 		return value === 1 || value === "1" || value === true;
 	}
 
 	function getCurrentViewMode(instance) {
 		if (instance?.[VIEW_MODE_KEY] !== "grid" && instance?.[VIEW_MODE_KEY] !== "list") {
-			instance[VIEW_MODE_KEY] = "list";
+			instance[VIEW_MODE_KEY] = isCustomListEnabled(instance) ? "list" : "grid";
 		}
 		return instance[VIEW_MODE_KEY];
 	}
@@ -200,12 +204,6 @@
 		});
 	}
 
-	function removeViewToggle(instance) {
-		const $container = instance?.$items_container;
-		if (!$container?.length) return;
-		$container.parent().find(".custom-pos-view-toggle-wrap").remove();
-	}
-
 	function patchItemSelector() {
 		const ItemSelector = erpnext?.PointOfSale?.ItemSelector;
 		if (!ItemSelector || !ItemSelector.prototype) return false;
@@ -217,10 +215,6 @@
 		const originalRenderItemList = ItemSelector.prototype.render_item_list;
 
 		ItemSelector.prototype.render_item_list_column_header = function () {
-			if (!isCustomListEnabled(this) && originalRenderItemListColumnHeader) {
-				return originalRenderItemListColumnHeader.call(this);
-			}
-
 			return `
 				<div class="custom-pos-list-header">
 					<div>${__("Image")}</div>
@@ -233,10 +227,6 @@
 		};
 
 		ItemSelector.prototype.get_item_html = function (item) {
-			if (!isCustomListEnabled(this) && originalGetItemHtml) {
-				return originalGetItemHtml.call(this, item);
-			}
-
 			const { serial_no, batch_no } = item;
 			const uom = item.uom || item.stock_uom || "";
 			const priceListRate = item.price_list_rate || 0;
@@ -272,13 +262,6 @@
 
 		ItemSelector.prototype.render_item_list = function (items) {
 			this[LAST_ITEMS_KEY] = items || [];
-
-			if (!isCustomListEnabled(this) && originalRenderItemList) {
-				removeViewToggle(this);
-				this.$items_container.removeClass("custom-pos-list-view");
-				return originalRenderItemList.call(this, items);
-			}
-
 			ensureViewToggle(this);
 			if (getCurrentViewMode(this) === "grid" && originalRenderItemList) {
 				this.$items_container.removeClass("custom-pos-list-view");
