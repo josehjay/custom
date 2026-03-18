@@ -24,7 +24,8 @@
 				display: flex !important;
 				flex-direction: column;
 				gap: 0;
-				padding: 0;
+				padding: 0 !important;
+				margin-top: 0 !important;
 				position: relative;
 				isolation: isolate;
 			}
@@ -41,9 +42,9 @@
 
 			.custom-pos-list-header {
 				position: sticky;
-				top: -1px;
-				background: var(--bg-color);
-				z-index: 200;
+				top: 0 !important;
+				background: var(--bg-color, #111827) !important;
+				z-index: 300;
 				font-size: var(--text-xs);
 				font-weight: 600;
 				text-transform: uppercase;
@@ -54,21 +55,11 @@
 				isolation: isolate;
 			}
 
-			.custom-pos-list-header::before {
-				content: "";
-				position: absolute;
-				left: 0;
-				right: 0;
-				top: -6px;
-				height: 6px;
-				background: var(--bg-color);
-				pointer-events: none;
-				z-index: -1;
-			}
-
 			.custom-pos-list-item {
 				cursor: pointer;
 				background: var(--bg-color);
+				position: relative;
+				z-index: 1;
 			}
 
 			.custom-pos-list-item:hover {
@@ -114,6 +105,11 @@
 			.custom-pos-qty-cell {
 				white-space: nowrap;
 				font-size: var(--text-sm);
+			}
+
+			.custom-pos-price-cell {
+				font-weight: 700;
+				color: var(--text-color, #f8fafc);
 			}
 
 			.custom-pos-qty-cell.is-green {
