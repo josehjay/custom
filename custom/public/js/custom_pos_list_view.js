@@ -9,7 +9,10 @@
 	const ITEMS_SIGNATURE_KEY = "__custom_pos_items_signature";
 	const CURRENT_PAGE_KEY = "__custom_pos_current_page";
 	const PAGE_SIZE_KEY = "__custom_pos_page_size";
+	const ENABLE_STATE_KEY = "__custom_pos_enable_state";
+	const ENABLE_FETCH_PROMISE_KEY = "__custom_pos_enable_fetch_promise";
 	const DEFAULT_PAGE_SIZE = 40;
+	const profileEnableCache = {};
 
 	function injectStyles() {
 		if (document.getElementById(STYLE_ID)) return;
@@ -129,6 +132,13 @@
 				margin-left: 8px;
 			}
 
+			.custom-pos-toolbar-row {
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				flex-wrap: wrap;
+			}
+
 			.custom-pos-pagination-wrap {
 				display: flex;
 				align-items: center;
@@ -183,12 +193,67 @@
 	}
 
 	function isCustomListEnabled(instance) {
-		const value =
+		maybeResolveEnableState(instance);
+		maybeFetchEnableState(instance);
+		return normalizeBool(instance?.[ENABLE_STATE_KEY]);
+	}
+
+	function normalizeBool(value) {
+		return value === 1 || value === "1" || value === true || value === "true";
+	}
+
+	function getPosProfileName(instance) {
+		return (
+			instance?.settings?.pos_profile ||
+			instance?.pos_profile?.name ||
+			(typeof instance?.pos_profile === "string" ? instance.pos_profile : null) ||
+			instance?.events?.get_frm?.doc?.pos_profile ||
+			null
+		);
+	}
+
+	function maybeResolveEnableState(instance) {
+		const valueFromRuntime =
 			instance?.settings?.[ENABLE_FIELD] ??
 			instance?.pos_profile?.[ENABLE_FIELD] ??
 			instance?.events?.get_frm?.doc?.[ENABLE_FIELD] ??
-			frappe?.boot?.[ENABLE_FIELD];
-		return value === 1 || value === "1" || value === true;
+			null;
+
+		if (valueFromRuntime !== null && valueFromRuntime !== undefined) {
+			instance[ENABLE_STATE_KEY] = normalizeBool(valueFromRuntime);
+			return;
+		}
+
+		const profileName = getPosProfileName(instance);
+		if (profileName && profileEnableCache[profileName] !== undefined) {
+			instance[ENABLE_STATE_KEY] = profileEnableCache[profileName];
+		}
+	}
+
+	function maybeFetchEnableState(instance) {
+		const profileName = getPosProfileName(instance);
+		if (!profileName || profileEnableCache[profileName] !== undefined) return;
+		if (instance?.[ENABLE_FETCH_PROMISE_KEY]) return;
+		if (!frappe?.db?.get_value) return;
+
+		instance[ENABLE_FETCH_PROMISE_KEY] = frappe.db
+			.get_value("POS Profile", profileName, ENABLE_FIELD)
+			.then((response) => {
+				const value = response?.message?.[ENABLE_FIELD];
+				const enabled = normalizeBool(value);
+				profileEnableCache[profileName] = enabled;
+				instance[ENABLE_STATE_KEY] = enabled;
+				if (typeof instance?.render_item_list === "function") {
+					instance.render_item_list(instance[LAST_ITEMS_KEY] || []);
+				}
+			})
+			.catch(() => {
+				profileEnableCache[profileName] = false;
+				instance[ENABLE_STATE_KEY] = false;
+			})
+			.finally(() => {
+				instance[ENABLE_FETCH_PROMISE_KEY] = null;
+			});
 	}
 
 	function getCurrentViewMode(instance) {
@@ -253,10 +318,21 @@
 		const $root = getSelectorRoot(instance);
 		if (!$root?.length) return null;
 
+		const $searchInput = $root
+			.find('input[placeholder*="Search by item"], input[placeholder*="search"], input[placeholder*="Search"]')
+			.first();
 		const $groupInput = $root.find(
-			'.item-group-field input, .item-group-field select, input[placeholder*="item group"], input[placeholder*="Item group"]'
+			'.item-group-field input, .item-group-field select, [data-fieldname="item_group"] input, [data-fieldname="item_group"] select, input[placeholder*="item group"], input[placeholder*="Item group"]'
 		).first();
 		if ($groupInput.length) {
+			const searchEl = $searchInput.get(0);
+			const parents = $groupInput.parents().toArray();
+			for (const parent of parents) {
+				if (!searchEl || parent.contains(searchEl)) {
+					return $(parent);
+				}
+			}
+
 			const $anchor = $groupInput.closest(".item-group-field, .frappe-control, .form-group, .control-input-wrapper, .col");
 			if ($anchor.length) return $anchor;
 		}
@@ -283,6 +359,7 @@
 			);
 			$anchor.after($wrap);
 		}
+		$anchor.addClass("custom-pos-toolbar-row");
 
 		const viewMode = getCurrentViewMode(instance);
 		const isListMode = viewMode === "list";
@@ -329,6 +406,12 @@
 		});
 
 		$pager.toggle(totalPages > 1);
+	}
+
+	function hidePaginationControls(instance) {
+		const $container = instance?.$items_container;
+		if (!$container?.length) return;
+		$container.parent().find(".custom-pos-pagination-wrap").hide();
 	}
 
 	function removeCustomControls(instance) {
@@ -420,13 +503,15 @@
 			}
 
 			ensureViewToggle(this);
-			const { pageItems, totalPages, currentPage, totalItems } = getPaginatedItems(this, safeItems);
-			ensurePaginationControls(this, totalItems, totalPages, currentPage);
 
 			if (getCurrentViewMode(this) === "grid" && originalRenderItemList) {
 				this.$items_container.removeClass("custom-pos-list-view");
-				return originalRenderItemList.call(this, pageItems);
+				hidePaginationControls(this);
+				return originalRenderItemList.call(this, safeItems);
 			}
+
+			const { pageItems, totalPages, currentPage, totalItems } = getPaginatedItems(this, safeItems);
+			ensurePaginationControls(this, totalItems, totalPages, currentPage);
 
 			this.$items_container.html("");
 

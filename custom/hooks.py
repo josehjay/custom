@@ -23,7 +23,6 @@ fixtures = [
                 "name",
                 "in",
                 [
-                    "POS Profile-custom_pos_section",
                     "POS Profile-use_custom_list_view_with_images",
                 ],
             ]

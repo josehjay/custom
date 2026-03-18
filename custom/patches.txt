@@ -1,2 +1,3 @@
 custom.patches.v0_0_1.add_custom_pos_section_to_pos_profile
+custom.patches.v0_0_2.remove_custom_pos_section_and_move_toggle
 

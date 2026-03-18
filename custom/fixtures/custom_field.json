@@ -1,20 +1,11 @@
 [
   {
     "doctype": "Custom Field",
-    "name": "POS Profile-custom_pos_section",
-    "dt": "POS Profile",
-    "fieldname": "custom_pos_section",
-    "fieldtype": "Section Break",
-    "insert_after": "auto_add_item_to_cart",
-    "label": "Custom POS"
-  },
-  {
-    "doctype": "Custom Field",
     "name": "POS Profile-use_custom_list_view_with_images",
     "dt": "POS Profile",
     "fieldname": "use_custom_list_view_with_images",
     "fieldtype": "Check",
-    "insert_after": "custom_pos_section",
+    "insert_after": "auto_add_item_to_cart",
     "label": "Use Custom List View with Images",
     "default": "0",
     "description": "Enable custom POS item list view with images."
