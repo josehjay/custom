@@ -199,14 +199,17 @@
 				margin: 0 !important;
 				white-space: nowrap;
 				font-size: var(--text-xs);
+				grid-column: span 3 / span 3 !important;
 			}
 
 			.custom-pos-toggle-anchor .control-input,
+			.custom-pos-toggle-anchor .control-input-wrapper,
 			.custom-pos-toggle-anchor .control-value,
 			.custom-pos-toggle-anchor .awesomplete,
 			.custom-pos-toggle-anchor input,
 			.custom-pos-toggle-anchor select {
 				min-width: 110px;
+				grid-column: span 9 / span 9 !important;
 			}
 
 			.custom-pos-pagination-wrap .page-info {
