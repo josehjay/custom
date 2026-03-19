@@ -189,7 +189,6 @@
 				display: inline-flex;
 				align-items: center;
 				gap: 6px;
-				max-width: 34%;
 			}
 
 			.custom-pos-toggle-anchor .control-label,
@@ -436,6 +435,31 @@
 		});
 	}
 
+	function enforceFilterGridColumns(instance) {
+		const $root = getSelectorRoot(instance);
+		if (!$root?.length) return;
+
+		const $itemGroupControl = $root
+			.find('[data-fieldname="item_group"], .frappe-control[data-fieldname="item_group"], .item-group-field')
+			.first();
+		if (!$itemGroupControl.length) return;
+
+		const labelNodes = $itemGroupControl.find(".control-label, label").toArray();
+		const inputNodes = $itemGroupControl
+			.find(".control-input, .control-input-wrapper, .control-value, .awesomplete, input, select")
+			.toArray();
+
+		labelNodes.forEach((node) => {
+			node.style.setProperty("grid-column", "span 3 / span 3", "important");
+			node.style.setProperty("width", "auto", "important");
+			node.style.setProperty("min-width", "auto", "important");
+		});
+
+		inputNodes.forEach((node) => {
+			node.style.setProperty("grid-column", "span 9 / span 9", "important");
+		});
+	}
+
 	function ensurePaginationControls(instance, totalItems, totalPages, currentPage) {
 		const $container = instance?.$items_container;
 		if (!$container?.length) return;
@@ -566,6 +590,7 @@
 			}
 
 			ensureViewToggle(this);
+			enforceFilterGridColumns(this);
 
 			if (getCurrentViewMode(this) === "grid" && originalRenderItemList) {
 				this.$items_container.html("");
