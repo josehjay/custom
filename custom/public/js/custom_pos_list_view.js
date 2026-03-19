@@ -37,6 +37,8 @@
 				align-items: center;
 				column-gap: 10px;
 				padding: 8px 10px;
+				margin-left: 8px;
+				margin-right: 8px;
 				border-bottom: 1px solid var(--border-color);
 			}
 
@@ -135,12 +137,14 @@
 			.custom-pos-view-switch {
 				display: inline-flex;
 				align-items: center;
-				gap: 4px;
+				gap: 2px;
 				padding: 2px;
-				margin-left: 4px;
+				margin-left: 6px;
+				margin-right: 0;
 				border: 1px solid var(--border-color);
 				border-radius: 8px;
 				background: var(--subtle-fg);
+				flex-shrink: 0;
 			}
 
 			.items-container.custom-pos-list-view > .custom-pos-list-header {
@@ -148,8 +152,8 @@
 			}
 
 			.custom-pos-view-switch .view-btn {
-				width: 30px;
-				height: 28px;
+				width: 34px;
+				height: 30px;
 				display: inline-flex;
 				align-items: center;
 				justify-content: center;
@@ -157,7 +161,9 @@
 				border-radius: 6px;
 				background: transparent;
 				color: var(--text-muted);
-				font-size: 14px;
+				font-size: 16px;
+				font-weight: 700;
+				line-height: 1;
 				cursor: pointer;
 			}
 
@@ -177,6 +183,30 @@
 				position: sticky;
 				bottom: 0;
 				z-index: 2;
+			}
+
+			.custom-pos-toggle-anchor {
+				display: inline-flex;
+				align-items: center;
+				gap: 6px;
+				max-width: 34%;
+			}
+
+			.custom-pos-toggle-anchor .control-label,
+			.custom-pos-toggle-anchor label {
+				width: auto !important;
+				min-width: auto !important;
+				margin: 0 !important;
+				white-space: nowrap;
+				font-size: var(--text-xs);
+			}
+
+			.custom-pos-toggle-anchor .control-input,
+			.custom-pos-toggle-anchor .control-value,
+			.custom-pos-toggle-anchor .awesomplete,
+			.custom-pos-toggle-anchor input,
+			.custom-pos-toggle-anchor select {
+				min-width: 110px;
 			}
 
 			.custom-pos-pagination-wrap .page-info {
@@ -383,6 +413,7 @@
 			);
 			$anchor.after($wrap);
 		}
+		$anchor.addClass("custom-pos-toggle-anchor");
 
 		const viewMode = getCurrentViewMode(instance);
 		const $gridBtn = $wrap.find(".view-btn-grid");
