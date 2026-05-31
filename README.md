@@ -85,8 +85,7 @@ Buying price list is used as a fallback only when no purchase history exists.
 If `custom_use_item_group_margins` is enabled, margin resolution priority is:
 
 1. Matching row in price list table `custom_item_group_margins` (per price list, per item group).
-2. `Item Group.custom_buying_margin_percent` (backward compatibility fallback).
-3. `Price List.custom_buying_margin_percent` (default for that price list).
+2. `Price List.custom_buying_margin_percent` (default for that price list).
 
 ### 4) Manual override support for item selling prices
 
@@ -129,9 +128,11 @@ This app applies patches in `custom/patches.txt`:
 4. `v0_0_4.add_item_price_manual_override_fields`
    - Adds manual override and auto-managed flags on `Item Price`.
 5. `v0_0_5.add_item_group_margin_fields`
-   - Adds item-group margin fields and price-list toggle for group-based margins.
+   - Adds initial item-group margin support fields.
 6. `v0_0_6.add_pricelist_item_group_margin_table`
    - Adds price-list child table for per-item-group margin overrides.
+7. `v0_0_7.remove_item_group_pricing_automation_fields`
+   - Removes Item Group-level pricing automation fields; pricing is now controlled in Price List only.
 
 ## Hooks used
 
@@ -180,4 +181,3 @@ bench restart
    - enable `Use Item Group Margins` if you want per-group margins
    - in `Item Group Margins` table, add specific item groups and margins for that price list
 5. For item-level exceptions, edit `Item Price` and keep `Manual Price Override` checked.
-6. If using group-based margins, set `Buying Margin %` on each relevant `Item Group`.

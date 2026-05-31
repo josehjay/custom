@@ -4,4 +4,5 @@ custom.patches.v0_0_3.add_price_list_margin_fields
 custom.patches.v0_0_4.add_item_price_manual_override_fields
 custom.patches.v0_0_5.add_item_group_margin_fields
 custom.patches.v0_0_6.add_pricelist_item_group_margin_table
+custom.patches.v0_0_7.remove_item_group_pricing_automation_fields
 

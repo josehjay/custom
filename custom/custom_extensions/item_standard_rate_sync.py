@@ -238,23 +238,6 @@ def upsert_selling_item_price(item_code: str, price_list: str, uom: str, rate: f
         frappe.flags.custom_auto_margin_sync = False
 
 
-def get_item_group_margin_percent(item_code: str) -> float | None:
-    """Get item-group margin override, if the field exists and value is set."""
-    meta = frappe.get_meta("Item Group")
-    if not meta.get_field("custom_buying_margin_percent"):
-        return None
-
-    item_group = frappe.db.get_value("Item", item_code, "item_group")
-    if not item_group:
-        return None
-
-    margin = frappe.db.get_value("Item Group", item_group, "custom_buying_margin_percent")
-    if margin is None:
-        return None
-
-    return flt(margin)
-
-
 def get_item_group(item_code: str) -> str | None:
     return frappe.db.get_value("Item", item_code, "item_group")
 
@@ -306,7 +289,6 @@ def sync_margin_based_selling_prices(item_code: str) -> None:
     latest_buying_rate_stock_uom = get_latest_buying_rate_from_transactions(item_code)
     default_buying_list = get_default_buying_price_list()
     item_uom_map = get_item_uom_conversion_map(item_code)
-    item_group_margin = get_item_group_margin_percent(item_code)
     item_group = get_item_group(item_code)
 
     for price_list in selling_lists:
@@ -315,9 +297,6 @@ def sync_margin_based_selling_prices(item_code: str) -> None:
             price_list_group_margins = get_price_list_item_group_margin_map(price_list.get("name"))
             if item_group and item_group in price_list_group_margins:
                 margin_pct = flt(price_list_group_margins[item_group])
-            elif item_group_margin is not None:
-                # Backward compatibility fallback to global Item Group margin.
-                margin_pct = item_group_margin
 
         buying_rate_stock_uom = latest_buying_rate_stock_uom
         if buying_rate_stock_uom <= 0 and default_buying_list:
