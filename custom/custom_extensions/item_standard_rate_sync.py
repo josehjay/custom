@@ -80,7 +80,7 @@ def get_buying_price_list_rate(item_code: str, price_list: str) -> float:
 
 def get_latest_buying_rate_from_transactions(item_code: str) -> float:
     """
-    Get the latest buying price from submitted purchase transactions.
+    Get latest buying price from submitted transactions normalized to stock UOM.
 
     Priority:
     1) Most recent submitted Purchase Invoice Item rate (non-return).
@@ -91,7 +91,9 @@ def get_latest_buying_rate_from_transactions(item_code: str) -> float:
 
     invoice_rate = frappe.db.sql(
         """
-        select pii.rate
+        select
+            pii.rate,
+            ifnull(pii.conversion_factor, 1) as conversion_factor
         from `tabPurchase Invoice Item` pii
         inner join `tabPurchase Invoice` pi on pi.name = pii.parent
         where pii.item_code = %(item_code)s
@@ -102,10 +104,14 @@ def get_latest_buying_rate_from_transactions(item_code: str) -> float:
         limit 1
         """,
         {"item_code": item_code},
-        as_list=True,
+        as_dict=True,
     )
     if invoice_rate:
-        return flt(invoice_rate[0][0])
+        row = invoice_rate[0]
+        rate = flt(row.get("rate") or 0)
+        conversion_factor = flt(row.get("conversion_factor") or 1)
+        if rate > 0 and conversion_factor > 0:
+            return rate / conversion_factor
 
     return flt(frappe.db.get_value("Item", item_code, "last_purchase_rate") or 0.0)
 
@@ -144,11 +150,12 @@ def get_margin_enabled_selling_price_lists() -> list[dict]:
 
     margin_field = "custom_buying_margin_percent"
     buying_source_field = "custom_buying_source_price_list"
+    use_item_group_margins_field = "custom_use_item_group_margins"
 
     result = frappe.get_all(
         "Price List",
         filters={"selling": 1, "enabled": 1, "custom_auto_price_from_buying": 1},
-        fields=["name", "currency", margin_field, buying_source_field],
+        fields=["name", "currency", margin_field, buying_source_field, use_item_group_margins_field],
     )
     return result
 
@@ -167,12 +174,11 @@ def is_margin_enabled_price_list(price_list: str) -> bool:
     )
 
 
-def upsert_selling_item_price(item_code: str, price_list: str, rate: float) -> None:
-    """Create or update the selling Item Price row for stock UOM."""
-    if not item_code or not price_list:
+def upsert_selling_item_price(item_code: str, price_list: str, uom: str, rate: float) -> None:
+    """Create or update the selling Item Price row for a specific UOM."""
+    if not item_code or not price_list or not uom:
         return
 
-    stock_uom = frappe.db.get_value("Item", item_code, "stock_uom")
     currency = frappe.db.get_value("Price List", price_list, "currency")
 
     existing_name = frappe.db.get_value(
@@ -181,7 +187,7 @@ def upsert_selling_item_price(item_code: str, price_list: str, rate: float) -> N
             "item_code": item_code,
             "price_list": price_list,
             "selling": 1,
-            "uom": stock_uom,
+            "uom": uom,
         },
         "name",
         order_by="valid_from desc, modified desc",
@@ -218,7 +224,7 @@ def upsert_selling_item_price(item_code: str, price_list: str, rate: float) -> N
             "price_list": price_list,
             "price_list_rate": flt(rate),
             "currency": currency,
-            "uom": stock_uom,
+            "uom": uom,
             "selling": 1,
             "buying": 0,
             "custom_manual_price_override": 0,
@@ -232,6 +238,38 @@ def upsert_selling_item_price(item_code: str, price_list: str, rate: float) -> N
         frappe.flags.custom_auto_margin_sync = False
 
 
+def get_item_group_margin_percent(item_code: str) -> float | None:
+    """Get item-group margin override, if the field exists and value is set."""
+    meta = frappe.get_meta("Item Group")
+    if not meta.get_field("custom_buying_margin_percent"):
+        return None
+
+    item_group = frappe.db.get_value("Item", item_code, "item_group")
+    if not item_group:
+        return None
+
+    margin = frappe.db.get_value("Item Group", item_group, "custom_buying_margin_percent")
+    if margin is None:
+        return None
+
+    return flt(margin)
+
+
+def get_item_uom_conversion_map(item_code: str) -> dict[str, float]:
+    """Return UOM conversion factors against stock UOM."""
+    item = frappe.get_doc("Item", item_code)
+    conversion_map: dict[str, float] = {item.stock_uom: 1.0}
+
+    for row in item.get("uoms") or []:
+        uom = row.get("uom")
+        factor = flt(row.get("conversion_factor") or 0)
+        if not uom or factor <= 0:
+            continue
+        conversion_map[uom] = factor
+
+    return conversion_map
+
+
 def sync_margin_based_selling_prices(item_code: str) -> None:
     """Generate selling prices from buying price + per-list margin."""
     if not item_code:
@@ -241,19 +279,34 @@ def sync_margin_based_selling_prices(item_code: str) -> None:
     if not selling_lists:
         return
 
-    latest_buying_rate = get_latest_buying_rate_from_transactions(item_code)
+    latest_buying_rate_stock_uom = get_latest_buying_rate_from_transactions(item_code)
     default_buying_list = get_default_buying_price_list()
+    item_uom_map = get_item_uom_conversion_map(item_code)
+    item_group_margin = get_item_group_margin_percent(item_code)
 
     for price_list in selling_lists:
         margin_pct = flt(price_list.get("custom_buying_margin_percent") or 0.0)
-        buying_rate = latest_buying_rate
-        if buying_rate <= 0 and default_buying_list:
+        if flt(price_list.get("custom_use_item_group_margins")) == 1 and item_group_margin is not None:
+            margin_pct = item_group_margin
+
+        buying_rate_stock_uom = latest_buying_rate_stock_uom
+        if buying_rate_stock_uom <= 0 and default_buying_list:
             # Operational fallback only when there is no purchase history yet.
             source_buying_list = price_list.get("custom_buying_source_price_list") or default_buying_list
-            buying_rate = get_buying_price_list_rate(item_code, source_buying_list)
+            buying_rate_stock_uom = get_buying_price_list_rate(item_code, source_buying_list)
 
-        selling_rate = buying_rate * (1 + (margin_pct / 100)) if buying_rate > 0 else 0.0
-        upsert_selling_item_price(item_code, price_list.get("name"), selling_rate)
+        selling_rate_stock_uom = (
+            buying_rate_stock_uom * (1 + (margin_pct / 100)) if buying_rate_stock_uom > 0 else 0.0
+        )
+
+        for uom, factor in item_uom_map.items():
+            selling_rate_for_uom = selling_rate_stock_uom * flt(factor)
+            upsert_selling_item_price(
+                item_code=item_code,
+                price_list=price_list.get("name"),
+                uom=uom,
+                rate=selling_rate_for_uom,
+            )
 
 
 def _extract_item_context(args, kwargs) -> frappe._dict:
@@ -300,6 +353,7 @@ def get_item_details_with_default_pricelist_fallback(*args, **kwargs):
 
 def enforce_item_standard_rate(doc, method=None):
     """Always derive Item.standard_rate from Item Price on save."""
+    sync_margin_based_selling_prices(doc.name)
     doc.standard_rate = resolve_standard_rate(doc.name)
 
 

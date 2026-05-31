@@ -62,7 +62,8 @@ For selected selling price lists, the app can auto-calculate item selling prices
 - Formula: `selling_price = latest_buying_price * (1 + margin_percent / 100)`
 - Triggered when buying `Item Price` is inserted/updated/deleted.
 - Uses per-price-list margin configuration.
-- Creates or updates selling `Item Price` rows for item stock UOM.
+- Can optionally use Item Group margin overrides.
+- Creates or updates selling `Item Price` rows for stock UOM and all item-defined UOMs.
 - Buying price source is the latest submitted purchase transaction price (not average).
 
 Default buying price list resolution:
@@ -75,9 +76,16 @@ Per selling price list configuration fields (on `Price List`):
 - `custom_auto_price_from_buying` (Check)
 - `custom_buying_margin_percent` (Percent)
 - `custom_buying_source_price_list` (Link to `Price List`, optional)
+- `custom_use_item_group_margins` (Check)
 
 If `custom_buying_source_price_list` is empty, default buying price list is used.
 Buying price list is used as a fallback only when no purchase history exists.
+
+If `custom_use_item_group_margins` is enabled, margin is read from:
+
+- `Item Group.custom_buying_margin_percent`
+
+When this is enabled but Item Group margin is empty, app falls back to the price list margin.
 
 ### 4) Manual override support for item selling prices
 
@@ -119,6 +127,8 @@ This app applies patches in `custom/patches.txt`:
    - Adds margin automation fields on `Price List`.
 4. `v0_0_4.add_item_price_manual_override_fields`
    - Adds manual override and auto-managed flags on `Item Price`.
+5. `v0_0_5.add_item_group_margin_fields`
+   - Adds item-group margin fields and price-list toggle for group-based margins.
 
 ## Hooks used
 
@@ -164,4 +174,6 @@ bench restart
    - enable `Auto Price From Buying`
    - set `Buying Margin %`
    - optionally set `Buying Source Price List`
+   - enable `Use Item Group Margins` if you want per-group margins
 5. For item-level exceptions, edit `Item Price` and keep `Manual Price Override` checked.
+6. If using group-based margins, set `Buying Margin %` on each relevant `Item Group`.
