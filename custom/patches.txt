@@ -1,4 +1,5 @@
 custom.patches.v0_0_1.add_custom_pos_section_to_pos_profile
 custom.patches.v0_0_2.remove_custom_pos_section_and_move_toggle
 custom.patches.v0_0_3.add_price_list_margin_fields
+custom.patches.v0_0_4.add_item_price_manual_override_fields
 

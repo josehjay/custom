@@ -121,6 +121,20 @@ def get_margin_enabled_selling_price_lists() -> list[dict]:
     return result
 
 
+def is_margin_enabled_price_list(price_list: str) -> bool:
+    """Check if a selling price list uses auto pricing from buying price."""
+    if not price_list:
+        return False
+
+    return bool(
+        frappe.db.get_value(
+            "Price List",
+            price_list,
+            "custom_auto_price_from_buying",
+        )
+    )
+
+
 def upsert_selling_item_price(item_code: str, price_list: str, rate: float) -> None:
     """Create or update the selling Item Price row for stock UOM."""
     if not item_code or not price_list:
@@ -142,7 +156,27 @@ def upsert_selling_item_price(item_code: str, price_list: str, rate: float) -> N
     )
 
     if existing_name:
-        frappe.db.set_value("Item Price", existing_name, "price_list_rate", flt(rate))
+        existing = frappe.db.get_value(
+            "Item Price",
+            existing_name,
+            ["custom_manual_price_override"],
+            as_dict=True,
+        )
+        if flt((existing or {}).get("custom_manual_price_override")) == 1:
+            return
+
+        frappe.flags.custom_auto_margin_sync = True
+        try:
+            frappe.db.set_value(
+                "Item Price",
+                existing_name,
+                {
+                    "price_list_rate": flt(rate),
+                    "custom_auto_margin_managed": 1,
+                },
+            )
+        finally:
+            frappe.flags.custom_auto_margin_sync = False
         return
 
     doc = frappe.get_doc(
@@ -155,9 +189,15 @@ def upsert_selling_item_price(item_code: str, price_list: str, rate: float) -> N
             "uom": stock_uom,
             "selling": 1,
             "buying": 0,
+            "custom_manual_price_override": 0,
+            "custom_auto_margin_managed": 1,
         }
     )
-    doc.insert(ignore_permissions=True)
+    frappe.flags.custom_auto_margin_sync = True
+    try:
+        doc.insert(ignore_permissions=True)
+    finally:
+        frappe.flags.custom_auto_margin_sync = False
 
 
 def sync_margin_based_selling_prices(item_code: str) -> None:
@@ -232,6 +272,24 @@ def enforce_item_standard_rate(doc, method=None):
 
 def on_item_price_change(doc, method=None):
     """Sync Item.standard_rate whenever Item Price changes."""
+    if (
+        flt(doc.get("selling")) == 1
+        and is_margin_enabled_price_list(doc.get("price_list"))
+        and flt(doc.get("custom_auto_margin_managed")) == 1
+        and flt(doc.get("custom_manual_price_override")) == 0
+        and doc.has_value_changed("price_list_rate")
+        and not getattr(frappe.flags, "custom_auto_margin_sync", False)
+    ):
+        # User changed an auto-managed selling price; preserve their override.
+        frappe.db.set_value(
+            "Item Price",
+            doc.name,
+            {
+                "custom_manual_price_override": 1,
+                "custom_auto_margin_managed": 0,
+            },
+        )
+
     if flt(doc.get("buying")) == 1:
         sync_margin_based_selling_prices(doc.item_code)
     sync_item_standard_rate(doc.item_code)
