@@ -15,6 +15,23 @@ page_js = {
 # Fallback include to ensure POS patch is loaded across route variants/builds.
 app_include_js = "/assets/custom/js/custom_pos_list_view.js"
 
+override_whitelisted_methods = {
+    "erpnext.stock.get_item_details.get_item_details": (
+        "custom.custom_extensions.item_standard_rate_sync.get_item_details_with_default_pricelist_fallback"
+    )
+}
+
+doc_events = {
+    "Item": {
+        "validate": "custom.custom_extensions.item_standard_rate_sync.enforce_item_standard_rate",
+    },
+    "Item Price": {
+        "after_insert": "custom.custom_extensions.item_standard_rate_sync.on_item_price_change",
+        "on_update": "custom.custom_extensions.item_standard_rate_sync.on_item_price_change",
+        "on_trash": "custom.custom_extensions.item_standard_rate_sync.on_item_price_trash",
+    },
+}
+
 fixtures = [
     {
         "dt": "Custom Field",
