@@ -255,6 +255,30 @@ def get_item_group_margin_percent(item_code: str) -> float | None:
     return flt(margin)
 
 
+def get_item_group(item_code: str) -> str | None:
+    return frappe.db.get_value("Item", item_code, "item_group")
+
+
+def get_price_list_item_group_margin_map(price_list: str) -> dict[str, float]:
+    """Return per-item-group margin overrides for a specific price list."""
+    if not price_list:
+        return {}
+
+    if not frappe.db.exists("DocType", "Price List Item Group Margin"):
+        return {}
+
+    rows = frappe.get_all(
+        "Price List Item Group Margin",
+        filters={
+            "parent": price_list,
+            "parenttype": "Price List",
+            "parentfield": "custom_item_group_margins",
+        },
+        fields=["item_group", "margin_percent"],
+    )
+    return {row.get("item_group"): flt(row.get("margin_percent") or 0) for row in rows if row.get("item_group")}
+
+
 def get_item_uom_conversion_map(item_code: str) -> dict[str, float]:
     """Return UOM conversion factors against stock UOM."""
     item = frappe.get_doc("Item", item_code)
@@ -283,11 +307,17 @@ def sync_margin_based_selling_prices(item_code: str) -> None:
     default_buying_list = get_default_buying_price_list()
     item_uom_map = get_item_uom_conversion_map(item_code)
     item_group_margin = get_item_group_margin_percent(item_code)
+    item_group = get_item_group(item_code)
 
     for price_list in selling_lists:
         margin_pct = flt(price_list.get("custom_buying_margin_percent") or 0.0)
-        if flt(price_list.get("custom_use_item_group_margins")) == 1 and item_group_margin is not None:
-            margin_pct = item_group_margin
+        if flt(price_list.get("custom_use_item_group_margins")) == 1:
+            price_list_group_margins = get_price_list_item_group_margin_map(price_list.get("name"))
+            if item_group and item_group in price_list_group_margins:
+                margin_pct = flt(price_list_group_margins[item_group])
+            elif item_group_margin is not None:
+                # Backward compatibility fallback to global Item Group margin.
+                margin_pct = item_group_margin
 
         buying_rate_stock_uom = latest_buying_rate_stock_uom
         if buying_rate_stock_uom <= 0 and default_buying_list:
