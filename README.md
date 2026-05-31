@@ -59,10 +59,11 @@ Rate resolution rules:
 
 For selected selling price lists, the app can auto-calculate item selling prices:
 
-- Formula: `selling_price = buying_price * (1 + margin_percent / 100)`
+- Formula: `selling_price = latest_buying_price * (1 + margin_percent / 100)`
 - Triggered when buying `Item Price` is inserted/updated/deleted.
 - Uses per-price-list margin configuration.
 - Creates or updates selling `Item Price` rows for item stock UOM.
+- Buying price source is the latest submitted purchase transaction price (not average).
 
 Default buying price list resolution:
 
@@ -76,6 +77,7 @@ Per selling price list configuration fields (on `Price List`):
 - `custom_buying_source_price_list` (Link to `Price List`, optional)
 
 If `custom_buying_source_price_list` is empty, default buying price list is used.
+Buying price list is used as a fallback only when no purchase history exists.
 
 ### 4) Manual override support for item selling prices
 

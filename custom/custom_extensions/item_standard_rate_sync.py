@@ -56,7 +56,7 @@ def get_default_price_list_rate(item_code: str, price_list: str) -> float:
 
 
 def get_buying_price_list_rate(item_code: str, price_list: str) -> float:
-    """Get the latest currently valid buying price for item in the given list."""
+    """Get latest currently valid buying Item Price (fallback source only)."""
     today = nowdate()
 
     rate = frappe.db.sql(
@@ -76,6 +76,38 @@ def get_buying_price_list_rate(item_code: str, price_list: str) -> float:
     )
 
     return flt(rate[0][0]) if rate else 0.0
+
+
+def get_latest_buying_rate_from_transactions(item_code: str) -> float:
+    """
+    Get the latest buying price from submitted purchase transactions.
+
+    Priority:
+    1) Most recent submitted Purchase Invoice Item rate (non-return).
+    2) Fallback to Item.last_purchase_rate.
+    """
+    if not item_code:
+        return 0.0
+
+    invoice_rate = frappe.db.sql(
+        """
+        select pii.rate
+        from `tabPurchase Invoice Item` pii
+        inner join `tabPurchase Invoice` pi on pi.name = pii.parent
+        where pii.item_code = %(item_code)s
+          and pi.docstatus = 1
+          and ifnull(pi.is_return, 0) = 0
+          and ifnull(pii.rate, 0) > 0
+        order by pi.posting_date desc, pi.posting_time desc, pi.creation desc
+        limit 1
+        """,
+        {"item_code": item_code},
+        as_list=True,
+    )
+    if invoice_rate:
+        return flt(invoice_rate[0][0])
+
+    return flt(frappe.db.get_value("Item", item_code, "last_purchase_rate") or 0.0)
 
 
 def resolve_standard_rate(item_code: str) -> float:
@@ -209,16 +241,17 @@ def sync_margin_based_selling_prices(item_code: str) -> None:
     if not selling_lists:
         return
 
+    latest_buying_rate = get_latest_buying_rate_from_transactions(item_code)
     default_buying_list = get_default_buying_price_list()
 
     for price_list in selling_lists:
         margin_pct = flt(price_list.get("custom_buying_margin_percent") or 0.0)
-        source_buying_list = price_list.get("custom_buying_source_price_list") or default_buying_list
+        buying_rate = latest_buying_rate
+        if buying_rate <= 0 and default_buying_list:
+            # Operational fallback only when there is no purchase history yet.
+            source_buying_list = price_list.get("custom_buying_source_price_list") or default_buying_list
+            buying_rate = get_buying_price_list_rate(item_code, source_buying_list)
 
-        if not source_buying_list:
-            continue
-
-        buying_rate = get_buying_price_list_rate(item_code, source_buying_list)
         selling_rate = buying_rate * (1 + (margin_pct / 100)) if buying_rate > 0 else 0.0
         upsert_selling_item_price(item_code, price_list.get("name"), selling_rate)
 
