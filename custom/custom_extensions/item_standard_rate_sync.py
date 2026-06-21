@@ -262,9 +262,14 @@ def get_price_list_item_group_margin_map(price_list: str) -> dict[str, float]:
     return {row.get("item_group"): flt(row.get("margin_percent") or 0) for row in rows if row.get("item_group")}
 
 
-def get_item_uom_conversion_map(item_code: str) -> dict[str, float]:
+def get_item_uom_conversion_map(item_code: str, item_doc=None) -> dict[str, float]:
     """Return UOM conversion factors against stock UOM."""
-    item = frappe.get_doc("Item", item_code)
+    if item_doc is not None:
+        item = item_doc
+    elif frappe.db.exists("Item", item_code):
+        item = frappe.get_doc("Item", item_code)
+    else:
+        return {}
     conversion_map: dict[str, float] = {item.stock_uom: 1.0}
 
     for row in item.get("uoms") or []:
@@ -277,9 +282,12 @@ def get_item_uom_conversion_map(item_code: str) -> dict[str, float]:
     return conversion_map
 
 
-def sync_margin_based_selling_prices(item_code: str) -> None:
+def sync_margin_based_selling_prices(item_code: str, item_doc=None) -> None:
     """Generate selling prices from buying price + per-list margin."""
     if not item_code:
+        return
+
+    if item_doc is None and not frappe.db.exists("Item", item_code):
         return
 
     selling_lists = get_margin_enabled_selling_price_lists()
@@ -288,7 +296,7 @@ def sync_margin_based_selling_prices(item_code: str) -> None:
 
     latest_buying_rate_stock_uom = get_latest_buying_rate_from_transactions(item_code)
     default_buying_list = get_default_buying_price_list()
-    item_uom_map = get_item_uom_conversion_map(item_code)
+    item_uom_map = get_item_uom_conversion_map(item_code, item_doc=item_doc)
     item_group = get_item_group(item_code)
 
     for price_list in selling_lists:
@@ -360,10 +368,34 @@ def get_item_details_with_default_pricelist_fallback(*args, **kwargs):
     return out
 
 
+def _item_code(doc) -> str:
+    return (doc.get("item_code") or doc.get("name") or "").strip()
+
+
 def enforce_item_standard_rate(doc, method=None):
     """Always derive Item.standard_rate from Item Price on save."""
-    sync_margin_based_selling_prices(doc.name)
-    doc.standard_rate = resolve_standard_rate(doc.name)
+    item_code = _item_code(doc)
+    if not item_code:
+        return
+
+    doc.standard_rate = resolve_standard_rate(item_code)
+
+    # Margin sync creates Item Price rows and reads Item from DB; skip until
+    # the Item row exists (after_insert handles new items).
+    if doc.is_new():
+        return
+
+    sync_margin_based_selling_prices(item_code)
+
+
+def on_item_after_insert(doc, method=None):
+    """Run margin pricing once the Item row exists."""
+    item_code = _item_code(doc)
+    if not item_code:
+        return
+
+    sync_margin_based_selling_prices(item_code, item_doc=doc)
+    sync_item_standard_rate(item_code)
 
 
 def on_item_price_change(doc, method=None):

@@ -24,6 +24,7 @@ override_whitelisted_methods = {
 doc_events = {
     "Item": {
         "validate": "custom.custom_extensions.item_standard_rate_sync.enforce_item_standard_rate",
+        "after_insert": "custom.custom_extensions.item_standard_rate_sync.on_item_after_insert",
     },
     "Item Price": {
         "after_insert": "custom.custom_extensions.item_standard_rate_sync.on_item_price_change",
