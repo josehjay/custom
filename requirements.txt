@@ -1,1 +1,7 @@
 # Keep empty unless this app introduces external Python dependencies.
+#
+# Do NOT pin `gunicorn` or `pypika` here. Frappe pins these itself via a git
+# URL in its own pyproject.toml, and `uv` requires a single, consistent URL
+# per package across the whole resolution graph. Duplicating Frappe's pin here
+# goes stale every time Frappe bumps it, breaking `bench update` with
+# "conflicting URLs for package" errors. See scripts/check_frappe_pins.py.
