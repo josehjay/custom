@@ -116,6 +116,128 @@ def get_latest_buying_rate_from_transactions(item_code: str) -> float:
     return flt(frappe.db.get_value("Item", item_code, "last_purchase_rate") or 0.0)
 
 
+_PO_BUYING_CACHE_TTL = 300  # seconds — keeps POS peek off the hot path
+
+
+def _get_item_stock_uom(item_code: str) -> str | None:
+    return frappe.db.get_value("Item", item_code, "stock_uom")
+
+
+def get_uom_conversion_factor(item_code: str, uom: str | None) -> float:
+    """
+    Return conversion factor of `uom` vs stock UOM (stock UOM => 1.0).
+
+    Uses a single indexed child-table lookup — avoids loading the full Item doc.
+    """
+    if not item_code:
+        return 0.0
+
+    stock_uom = _get_item_stock_uom(item_code)
+    if not stock_uom:
+        return 0.0
+
+    target = (uom or stock_uom).strip()
+    if not target or target == stock_uom:
+        return 1.0
+
+    factor = frappe.db.get_value(
+        "UOM Conversion Detail",
+        {"parent": item_code, "parenttype": "Item", "uom": target},
+        "conversion_factor",
+    )
+    return flt(factor or 0)
+
+
+def get_latest_purchase_order_buying(item_code: str) -> dict | None:
+    """
+    Latest submitted Purchase Order rate for an item, normalized to stock UOM.
+
+    Cached briefly to avoid repeated PO scans under POS hover traffic.
+    """
+    if not item_code:
+        return None
+
+    cache = frappe.cache()
+    cache_key = f"custom:po_buy_rate:{item_code}"
+    cached = cache.get_value(cache_key)
+    if cached is not None:
+        return cached or None
+
+    row = frappe.db.sql(
+        """
+        select
+            poi.rate,
+            poi.uom,
+            ifnull(poi.conversion_factor, 1) as conversion_factor,
+            poi.parent as purchase_order,
+            po.currency,
+            po.transaction_date
+        from `tabPurchase Order Item` poi
+        inner join `tabPurchase Order` po on po.name = poi.parent
+        where poi.item_code = %(item_code)s
+          and po.docstatus = 1
+          and ifnull(poi.rate, 0) > 0
+          and ifnull(poi.conversion_factor, 0) > 0
+        order by po.transaction_date desc, po.modified desc, po.creation desc
+        limit 1
+        """,
+        {"item_code": item_code},
+        as_dict=True,
+    )
+
+    payload = None
+    if row:
+        source = row[0]
+        source_rate = flt(source.rate)
+        conversion_factor = flt(source.conversion_factor) or 1.0
+        payload = {
+            "purchase_order": source.purchase_order,
+            "transaction_date": str(source.transaction_date) if source.transaction_date else None,
+            "source_uom": source.uom,
+            "source_rate": source_rate,
+            "source_conversion_factor": conversion_factor,
+            "rate_per_stock_uom": source_rate / conversion_factor,
+            "currency": source.currency,
+        }
+
+    # Cache empty results too (short TTL) to avoid repeat misses.
+    cache.set_value(cache_key, payload or {}, expires_in_sec=_PO_BUYING_CACHE_TTL)
+    return payload
+
+
+def build_display_uom_buying_rate(item_code: str, display_uom: str | None) -> dict | None:
+    """Convert latest PO buying rate into the UOM shown on POS / sales rows."""
+    buying = get_latest_purchase_order_buying(item_code)
+    if not buying:
+        return None
+
+    stock_uom = _get_item_stock_uom(item_code)
+    if not stock_uom:
+        return None
+
+    target_uom = (display_uom or stock_uom).strip() or stock_uom
+    display_factor = get_uom_conversion_factor(item_code, target_uom)
+    if display_factor <= 0:
+        return None
+
+    rate_per_display_uom = flt(buying["rate_per_stock_uom"]) * display_factor
+    if rate_per_display_uom <= 0:
+        return None
+
+    return {
+        "rate": flt(rate_per_display_uom),
+        "uom": target_uom,
+        "stock_uom": stock_uom,
+        "rate_per_stock_uom": flt(buying["rate_per_stock_uom"]),
+        "source_uom": buying.get("source_uom"),
+        "source_rate": flt(buying.get("source_rate") or 0),
+        "source_conversion_factor": flt(buying.get("source_conversion_factor") or 0),
+        "purchase_order": buying.get("purchase_order"),
+        "transaction_date": buying.get("transaction_date"),
+        "currency": buying.get("currency"),
+    }
+
+
 def resolve_standard_rate(item_code: str) -> float:
     """Resolve the standard selling rate from default selling price list."""
     if not item_code:
@@ -522,24 +644,57 @@ def on_item_price_trash(doc, method=None):
     sync_item_standard_rate(doc.item_code)
 
 
+def clear_purchase_order_buying_cache(doc, method=None):
+    """Drop short-lived PO buying cache when a Purchase Order changes."""
+    cache = frappe.cache()
+    seen = set()
+    for row in doc.get("items") or []:
+        item_code = (row.get("item_code") or "").strip()
+        if not item_code or item_code in seen:
+            continue
+        seen.add(item_code)
+        cache.delete_value(f"custom:po_buy_rate:{item_code}")
+
+
 @frappe.whitelist()
-def get_item_price_matrix(item_code: str, current_price_list: str | None = None) -> dict:
+def get_item_price_matrix(
+    item_code: str,
+    current_price_list: str | None = None,
+    display_uom: str | None = None,
+) -> dict:
     """
     Return currently valid selling prices for an item across price lists / UOMs.
 
+    Also returns latest Purchase Order buying rate converted to `display_uom`
+    (the UOM shown on POS / sales rows) when the user may read Purchase Orders.
+
     Used by POS and sales document UIs to show a compact price peek popover.
     """
-    item_code = (item_code or "").strip()
-    if not item_code:
-        return {"item_code": "", "prices": [], "default_price_list": None}
-
-    if not frappe.has_permission("Item Price", "read"):
+    if frappe.session.user == "Guest":
         frappe.throw(frappe._("Not permitted"), frappe.PermissionError)
+
+    item_code = (item_code or "").strip()[:140]
+    display_uom = (display_uom or "").strip()[:140] or None
+    current_price_list = (current_price_list or "").strip()[:140] or None
+
+    if not item_code:
+        return {
+            "item_code": "",
+            "prices": [],
+            "buying": None,
+            "default_price_list": None,
+        }
+
+    if not frappe.has_permission("Item", "read") or not frappe.has_permission("Item Price", "read"):
+        frappe.throw(frappe._("Not permitted"), frappe.PermissionError)
+
+    if not frappe.db.exists("Item", item_code):
+        frappe.throw(frappe._("Item not found"))
 
     today = nowdate()
     default_price_list = get_default_selling_price_list()
-    current_price_list = (current_price_list or "").strip() or None
 
+    # Cap rows so a noisy item cannot inflate the payload under POS hover.
     rows = frappe.db.sql(
         """
         select
@@ -561,6 +716,7 @@ def get_item_price_matrix(item_code: str, current_price_list: str | None = None)
             case when ip.price_list = %(default_price_list)s then 0 else 1 end,
             pl.name asc,
             ip.uom asc
+        limit 40
         """,
         {
             "item_code": item_code,
@@ -584,10 +740,24 @@ def get_item_price_matrix(item_code: str, current_price_list: str | None = None)
             }
         )
 
+    buying = None
+    # Buying cost is sensitive — only include when the user can read POs.
+    # Omit (do not throw) so selling peek still works for restricted POS roles.
+    if frappe.has_permission("Purchase Order", "read"):
+        buying = build_display_uom_buying_rate(item_code, display_uom)
+
+    item_name, stock_uom = frappe.db.get_value("Item", item_code, ["item_name", "stock_uom"]) or (
+        item_code,
+        None,
+    )
+
     return {
         "item_code": item_code,
-        "item_name": frappe.db.get_value("Item", item_code, "item_name") or item_code,
+        "item_name": item_name or item_code,
+        "stock_uom": stock_uom,
+        "display_uom": display_uom or stock_uom,
         "default_price_list": default_price_list,
         "current_price_list": current_price_list,
         "prices": prices,
+        "buying": buying,
     }

@@ -150,24 +150,59 @@ Defined in `custom/hooks.py`:
 
 ## Installation / update
 
-From bench:
+### First-time install
 
 ```bash
+cd /path/to/frappe-bench
+bench get-app <your-custom-git-url>
 bench --site <your-site> install-app custom
-bench --site <your-site> migrate
 bench build --app custom
 bench --site <your-site> clear-cache
 bench restart
 ```
 
-If app is already installed and you only changed code/patches:
+### Update only this app (already installed)
+
+`bench update` refreshes **all** apps. To update **only** `custom`:
 
 ```bash
+cd /path/to/frappe-bench
+
+# 1) Pull latest code for this app only
+cd apps/custom
+git pull
+cd ../..
+
+# 2) Reinstall Python package for this app (picks up new modules)
+bench setup requirements --app custom
+# or: ./env/bin/pip install -e apps/custom --quiet
+
+# 3) Run patches / schema for this site
 bench --site <your-site> migrate
+
+# 4) Rebuild JS/CSS assets for this app only
 bench build --app custom
+
+# 5) Clear cache and reload processes
 bench --site <your-site> clear-cache
 bench restart
 ```
+
+If the bench uses a specific branch:
+
+```bash
+cd apps/custom
+git fetch origin
+git checkout <branch>
+git pull origin <branch>
+cd ../..
+```
+
+Notes:
+
+- `migrate` / `build --app custom` alone do **not** download new commits — you must `git pull` inside `apps/custom` first.
+- Skip `bench setup requirements` if you only changed Python/JS inside the app and did not change dependencies.
+- Hard-refresh the browser (Ctrl+Shift+R) after asset builds so POS JS updates load.
 
 ## Automatic versioning
 

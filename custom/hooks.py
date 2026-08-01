@@ -41,6 +41,11 @@ doc_events = {
         "on_update": "custom.custom_extensions.item_standard_rate_sync.on_item_price_change",
         "on_trash": "custom.custom_extensions.item_standard_rate_sync.on_item_price_trash",
     },
+    "Purchase Order": {
+        "on_submit": "custom.custom_extensions.item_standard_rate_sync.clear_purchase_order_buying_cache",
+        "on_cancel": "custom.custom_extensions.item_standard_rate_sync.clear_purchase_order_buying_cache",
+        "on_update_after_submit": "custom.custom_extensions.item_standard_rate_sync.clear_purchase_order_buying_cache",
+    },
 }
 
 fixtures = [

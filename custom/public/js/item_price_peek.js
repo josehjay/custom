@@ -164,6 +164,42 @@
 				border-color: var(--primary);
 			}
 
+			.custom-price-peek-popover .peek-buying {
+				padding: 10px 12px;
+				border-bottom: 1px solid var(--border-color);
+				background: var(--subtle-fg, var(--bg-light-gray, #f8f8f8));
+			}
+
+			.custom-price-peek-popover .peek-buying-label {
+				font-size: var(--text-xs, 11px);
+				font-weight: 600;
+				text-transform: uppercase;
+				letter-spacing: 0.02em;
+				color: var(--text-muted);
+				margin-bottom: 4px;
+			}
+
+			.custom-price-peek-popover .peek-buying-row {
+				display: flex;
+				align-items: baseline;
+				justify-content: space-between;
+				gap: 10px;
+			}
+
+			.custom-price-peek-popover .peek-buying-rate {
+				font-size: var(--text-md, 14px);
+				font-weight: 700;
+				color: var(--text-color);
+				white-space: nowrap;
+			}
+
+			.custom-price-peek-popover .peek-buying-meta {
+				font-size: var(--text-xs, 11px);
+				color: var(--text-muted);
+				line-height: 1.35;
+				text-align: right;
+			}
+
 			.custom-price-peek-inline {
 				display: inline-flex;
 				align-items: center;
@@ -185,22 +221,23 @@
 		}
 	}
 
-	function getCacheKey(itemCode, priceList) {
-		return `${itemCode}::${priceList || ""}`;
+	function getCacheKey(itemCode, priceList, uom) {
+		return `${itemCode}::${priceList || ""}::${uom || ""}`;
 	}
 
-	function readCache(itemCode, priceList) {
-		const entry = CACHE.get(getCacheKey(itemCode, priceList));
+	function readCache(itemCode, priceList, uom) {
+		const key = getCacheKey(itemCode, priceList, uom);
+		const entry = CACHE.get(key);
 		if (!entry) return null;
 		if (Date.now() - entry.at > CACHE_TTL_MS) {
-			CACHE.delete(getCacheKey(itemCode, priceList));
+			CACHE.delete(key);
 			return null;
 		}
 		return entry.data;
 	}
 
-	function writeCache(itemCode, priceList, data) {
-		CACHE.set(getCacheKey(itemCode, priceList), { at: Date.now(), data });
+	function writeCache(itemCode, priceList, uom, data) {
+		CACHE.set(getCacheKey(itemCode, priceList, uom), { at: Date.now(), data });
 	}
 
 	function getPopover() {
@@ -293,15 +330,47 @@
 		el.querySelector(".peek-close")?.addEventListener("click", hide);
 	}
 
+	function renderBuying(buying) {
+		if (!buying || !(flt(buying.rate) > 0)) return "";
+
+		const uom = buying.uom || "";
+		const rateLabel = `${formatRate(buying.rate, buying.currency)}${uom ? ` / ${uom}` : ""}`;
+		const sourceBits = [];
+		if (buying.purchase_order) {
+			sourceBits.push(buying.purchase_order);
+		}
+		if (buying.source_uom && buying.source_rate != null) {
+			sourceBits.push(
+				`${formatRate(buying.source_rate, buying.currency)} / ${buying.source_uom}`
+			);
+		}
+		if (buying.transaction_date) {
+			sourceBits.push(buying.transaction_date);
+		}
+
+		return `
+			<div class="peek-buying">
+				<div class="peek-buying-label">${__("Buying (latest PO)")}</div>
+				<div class="peek-buying-row">
+					<div class="peek-buying-rate">${escapeHtml(rateLabel)}</div>
+					<div class="peek-buying-meta">${escapeHtml(sourceBits.join(" · ") || __("From Purchase Order"))}</div>
+				</div>
+			</div>
+		`;
+	}
+
 	function renderPrices(data) {
 		const el = getPopover();
 		const prices = data?.prices || [];
 		const title = data?.item_name || data?.item_code || __("Item prices");
 		const subtitle = data?.item_code && data?.item_name !== data?.item_code ? data.item_code : __("All price lists");
+		const buyingHtml = renderBuying(data?.buying);
 
 		let bodyHtml = "";
-		if (!prices.length) {
+		if (!prices.length && !buyingHtml) {
 			bodyHtml = `<div class="peek-empty">${__("No other prices found")}</div>`;
+		} else if (!prices.length) {
+			bodyHtml = `<div class="peek-empty">${__("No selling price lists found")}</div>`;
 		} else {
 			const rows = prices
 				.map((row) => {
@@ -346,13 +415,21 @@
 				</div>
 				<button type="button" class="peek-close" aria-label="${__("Close")}">×</button>
 			</div>
+			${buyingHtml}
 			<div class="peek-body">${bodyHtml}</div>
 		`;
 		el.querySelector(".peek-close")?.addEventListener("click", hide);
 	}
 
-	function fetchPrices(itemCode, currentPriceList) {
-		const cached = readCache(itemCode, currentPriceList);
+	function peekOptionsFrom(btn, options = {}) {
+		return {
+			priceList: options.priceList || btn?.dataset?.priceList || null,
+			uom: options.uom || btn?.dataset?.uom || null,
+		};
+	}
+
+	function fetchPrices(itemCode, currentPriceList, displayUom) {
+		const cached = readCache(itemCode, currentPriceList, displayUom);
 		if (cached) return Promise.resolve(cached);
 
 		return frappe
@@ -361,11 +438,12 @@
 				args: {
 					item_code: itemCode,
 					current_price_list: currentPriceList || null,
+					display_uom: displayUom || null,
 				},
 			})
 			.then((r) => {
-				const data = r?.message || { item_code: itemCode, prices: [] };
-				writeCache(itemCode, currentPriceList, data);
+				const data = r?.message || { item_code: itemCode, prices: [], buying: null };
+				writeCache(itemCode, currentPriceList, displayUom, data);
 				return data;
 			});
 	}
@@ -381,12 +459,13 @@
 		activeAnchor = anchor;
 		anchor.classList.add("is-open");
 
+		const opts = peekOptionsFrom(anchor, options);
 		const el = getPopover();
 		el.style.display = "block";
 		renderLoading(itemCode);
 		positionPopover(anchor);
 
-		fetchPrices(itemCode, options.priceList)
+		fetchPrices(itemCode, opts.priceList, opts.uom)
 			.then((data) => {
 				if (activeAnchor !== anchor) return;
 				renderPrices(data);
@@ -408,9 +487,8 @@
 		btn.setAttribute("aria-label", __("Show other prices"));
 		btn.dataset.itemCode = itemCode;
 		if (options.priceList) btn.dataset.priceList = options.priceList;
-		btn.innerHTML = `<span class="peek-icon" aria-hidden="true">${frappe.utils.icon ? "" : "i"}</span>`;
+		if (options.uom) btn.dataset.uom = options.uom;
 
-		// Prefer Frappe icon helper when available; fall back to a compact glyph.
 		try {
 			if (typeof frappe.utils.icon === "function") {
 				btn.innerHTML = `<span class="peek-icon">${frappe.utils.icon("money-coins-1", "xs")}</span>`;
@@ -423,7 +501,7 @@
 
 		btn.addEventListener("mouseenter", (e) => {
 			e.stopPropagation();
-			show(btn, itemCode, { priceList: options.priceList || btn.dataset.priceList });
+			show(btn, itemCode, peekOptionsFrom(btn, options));
 		});
 		btn.addEventListener("mouseleave", () => scheduleHide());
 		btn.addEventListener("mousedown", (e) => {
@@ -436,7 +514,7 @@
 			if (activeAnchor === btn && getPopover().style.display !== "none") {
 				hide();
 			} else {
-				show(btn, itemCode, { priceList: options.priceList || btn.dataset.priceList });
+				show(btn, itemCode, peekOptionsFrom(btn, options));
 			}
 		});
 
@@ -451,6 +529,7 @@
 		if (btn) {
 			btn.dataset.itemCode = itemCode;
 			if (options.priceList) btn.dataset.priceList = options.priceList;
+			if (options.uom) btn.dataset.uom = options.uom;
 			return btn;
 		}
 
@@ -476,6 +555,10 @@
 				(typeof getPriceList === "function" ? getPriceList() : null) ||
 				wrapper.getAttribute("data-price-list") ||
 				"";
+			const uom =
+				wrapper.getAttribute("data-uom") ||
+				wrapper.getAttribute("data-stock-uom") ||
+				"";
 
 			let host =
 				wrapper.querySelector(".custom-pos-price-cell") ||
@@ -494,7 +577,7 @@
 				host.style.alignItems = "center";
 			}
 
-			attachTo(host, itemCode, { priceList });
+			attachTo(host, itemCode, { priceList, uom });
 		});
 	}
 

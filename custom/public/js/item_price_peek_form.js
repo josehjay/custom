@@ -53,6 +53,7 @@
 		$host.find(`.${BTN_CLASS}`).remove();
 		window.custom_item_price_peek.attachTo($host.get(0), gridRow.doc.item_code, {
 			priceList: getSellingPriceList(frm),
+			uom: gridRow.doc.uom || gridRow.doc.stock_uom || null,
 		});
 	}
 
