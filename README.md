@@ -169,6 +169,18 @@ bench --site <your-site> clear-cache
 bench restart
 ```
 
+## Automatic versioning
+
+Every `git push` / remote sync bumps the patch version (`custom/__init__.py` and `setup.py`) and commits `chore: bump version to X.Y.Z`.
+
+After cloning, enable the git hook once:
+
+```bash
+python scripts/install_git_hooks.py
+```
+
+Skip a bump when needed: `SKIP_VERSION_BUMP=1 git push`.
+
 ## Recommended configuration checklist
 
 1. In `POS Profile`, set `Use Custom List View with Images` as needed.

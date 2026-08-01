@@ -12,7 +12,7 @@ def get_default_selling_price_list() -> str | None:
         "Price List",
         {"selling": 1, "enabled": 1},
         "name",
-        order_by="is_default desc, modified desc",
+        order_by="modified desc",
     )
     return fallback
 
@@ -27,7 +27,7 @@ def get_default_buying_price_list() -> str | None:
         "Price List",
         {"buying": 1, "enabled": 1},
         "name",
-        order_by="is_default desc, modified desc",
+        order_by="modified desc",
     )
     return fallback
 
@@ -546,8 +546,7 @@ def get_item_price_matrix(item_code: str, current_price_list: str | None = None)
             ip.price_list,
             ip.uom,
             ip.price_list_rate,
-            ip.currency,
-            pl.is_default
+            ip.currency
         from `tabItem Price` ip
         inner join `tabPrice List` pl on pl.name = ip.price_list
         where ip.item_code = %(item_code)s
