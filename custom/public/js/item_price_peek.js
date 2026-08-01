@@ -21,25 +21,24 @@
 				min-width: 22px;
 				margin-left: 6px;
 				padding: 0;
-				border: 1px solid var(--gray-400, #98a2b3);
+				border: 0;
 				border-radius: 999px;
-				background: var(--fg-color, #fff);
-				color: var(--primary-color, var(--primary, #171717));
+				background: transparent;
+				color: var(--text-muted, var(--gray-600, #667085));
 				cursor: pointer;
 				vertical-align: middle;
 				line-height: 1;
 				flex-shrink: 0;
 				position: relative;
 				z-index: 5;
-				box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
-				transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+				box-shadow: none;
+				transition: color 0.12s ease, background 0.12s ease, opacity 0.12s ease;
 			}
 
 			.custom-price-peek-btn:hover,
 			.custom-price-peek-btn.is-open {
-				color: #fff;
-				border-color: var(--primary-color, var(--primary, #171717));
-				background: var(--primary-color, var(--primary, #171717));
+				color: var(--primary-color, var(--primary, var(--text-color, #171717)));
+				background: var(--subtle-fg, var(--bg-color, transparent));
 			}
 
 			.custom-price-peek-btn .peek-icon {
@@ -54,6 +53,23 @@
 			.custom-pos-list-item .custom-price-peek-btn {
 				opacity: 1;
 				visibility: visible;
+			}
+
+			/* Theme-aware contrast for light / dark desk + POS */
+			[data-theme="dark"] .custom-price-peek-btn,
+			.dark .custom-price-peek-btn,
+			body[data-theme-mode="dark"] .custom-price-peek-btn {
+				color: var(--text-muted, rgba(255, 255, 255, 0.65));
+			}
+
+			[data-theme="dark"] .custom-price-peek-btn:hover,
+			[data-theme="dark"] .custom-price-peek-btn.is-open,
+			.dark .custom-price-peek-btn:hover,
+			.dark .custom-price-peek-btn.is-open,
+			body[data-theme-mode="dark"] .custom-price-peek-btn:hover,
+			body[data-theme-mode="dark"] .custom-price-peek-btn.is-open {
+				color: var(--primary-color, var(--primary, #fff));
+				background: var(--subtle-fg, rgba(255, 255, 255, 0.08));
 			}
 
 			.custom-price-peek-popover {

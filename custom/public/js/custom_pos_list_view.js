@@ -232,19 +232,36 @@
 				min-width: 22px;
 				margin-left: 6px;
 				padding: 0;
-				border: 1px solid #98a2b3;
+				border: 0;
 				border-radius: 999px;
-				background: #fff;
-				color: #171717;
+				background: transparent;
+				color: var(--text-muted, #667085);
 				cursor: pointer;
 				line-height: 1;
 				flex-shrink: 0;
 				z-index: 5;
 				font-weight: 700;
+				box-shadow: none;
+			}
+			.custom-price-peek-btn:hover,
+			.custom-price-peek-btn.is-open {
+				color: var(--primary-color, var(--primary, var(--text-color, #171717)));
+				background: var(--subtle-fg, var(--bg-color, transparent));
 			}
 			.custom-price-peek-btn .peek-icon {
 				font-size: 12px;
 				font-style: normal;
+			}
+			[data-theme="dark"] .custom-price-peek-btn,
+			.dark .custom-price-peek-btn {
+				color: var(--text-muted, rgba(255, 255, 255, 0.65));
+			}
+			[data-theme="dark"] .custom-price-peek-btn:hover,
+			[data-theme="dark"] .custom-price-peek-btn.is-open,
+			.dark .custom-price-peek-btn:hover,
+			.dark .custom-price-peek-btn.is-open {
+				color: var(--primary-color, var(--primary, #fff));
+				background: var(--subtle-fg, rgba(255, 255, 255, 0.08));
 			}
 		`;
 
