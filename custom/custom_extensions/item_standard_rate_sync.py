@@ -179,6 +179,11 @@ def upsert_selling_item_price(item_code: str, price_list: str, uom: str, rate: f
     if not item_code or not price_list or not uom:
         return
 
+    # Never create/update auto-margin prices to blank/zero — that produces the
+    # "Wholesale 0.00" rows when an item is created without a buying cost yet.
+    if flt(rate) <= 0:
+        return
+
     currency = frappe.db.get_value("Price List", price_list, "currency")
 
     existing_name = frappe.db.get_value(
@@ -236,6 +241,77 @@ def upsert_selling_item_price(item_code: str, price_list: str, uom: str, rate: f
         doc.insert(ignore_permissions=True)
     finally:
         frappe.flags.custom_auto_margin_sync = False
+
+
+def ensure_default_selling_item_price(doc) -> None:
+    """
+    Persist Item.standard_rate onto the default selling price list.
+
+    On Item create, users enter Standard Selling Rate for the default selling
+    price list. That value must become a real Item Price row — margin lists
+    (e.g. Wholesale) are derived separately and must not replace it.
+    """
+    item_code = _item_code(doc)
+    rate = flt(doc.get("standard_rate") or 0)
+    if not item_code or rate <= 0:
+        return
+
+    price_list = get_default_selling_price_list()
+    if not price_list:
+        return
+
+    # Margin-enabled lists are auto-managed; never treat them as the default
+    # selling destination for the manually entered standard rate.
+    if is_margin_enabled_price_list(price_list):
+        return
+
+    uom = (doc.get("stock_uom") or "").strip()
+    if not uom:
+        uom = frappe.db.get_value("Item", item_code, "stock_uom")
+    if not uom:
+        return
+
+    existing_rate = get_default_price_list_rate(item_code, price_list)
+    if existing_rate > 0:
+        return
+
+    existing_name = frappe.db.get_value(
+        "Item Price",
+        {
+            "item_code": item_code,
+            "price_list": price_list,
+            "selling": 1,
+            "uom": uom,
+        },
+        "name",
+        order_by="valid_from desc, modified desc",
+    )
+    if existing_name:
+        # Replace a blank placeholder row if one already exists.
+        frappe.db.set_value(
+            "Item Price",
+            existing_name,
+            "price_list_rate",
+            rate,
+            update_modified=True,
+        )
+        return
+
+    currency = frappe.db.get_value("Price List", price_list, "currency")
+    frappe.get_doc(
+        {
+            "doctype": "Item Price",
+            "item_code": item_code,
+            "price_list": price_list,
+            "price_list_rate": rate,
+            "currency": currency,
+            "uom": uom,
+            "selling": 1,
+            "buying": 0,
+            "custom_manual_price_override": 0,
+            "custom_auto_margin_managed": 0,
+        }
+    ).insert(ignore_permissions=True)
 
 
 def get_item_group(item_code: str) -> str | None:
@@ -316,6 +392,10 @@ def sync_margin_based_selling_prices(item_code: str, item_doc=None) -> None:
             buying_rate_stock_uom * (1 + (margin_pct / 100)) if buying_rate_stock_uom > 0 else 0.0
         )
 
+        # No buying cost yet → do not invent blank wholesale/margin prices.
+        if selling_rate_stock_uom <= 0:
+            continue
+
         for uom, factor in item_uom_map.items():
             selling_rate_for_uom = selling_rate_stock_uom * flt(factor)
             upsert_selling_item_price(
@@ -373,27 +453,39 @@ def _item_code(doc) -> str:
 
 
 def enforce_item_standard_rate(doc, method=None):
-    """Always derive Item.standard_rate from Item Price on save."""
+    """Keep Item.standard_rate aligned with default selling Item Price."""
     item_code = _item_code(doc)
     if not item_code:
         return
 
-    doc.standard_rate = resolve_standard_rate(item_code)
-
-    # Margin sync creates Item Price rows and reads Item from DB; skip until
-    # the Item row exists (after_insert handles new items).
+    # On new items the Item Price row does not exist yet. Preserve the rate the
+    # user typed into Standard Selling Rate instead of wiping it to 0.00.
     if doc.is_new():
+        resolved = resolve_standard_rate(item_code)
+        if resolved > 0:
+            doc.standard_rate = resolved
         return
+
+    # Materialize a missing default selling Item Price from the entered rate.
+    if flt(doc.standard_rate or 0) > 0 and resolve_standard_rate(item_code) <= 0:
+        ensure_default_selling_item_price(doc)
+
+    resolved = resolve_standard_rate(item_code)
+
+    # Existing items: Item Price is source of truth when a rate exists.
+    if resolved > 0 or flt(doc.standard_rate or 0) == 0:
+        doc.standard_rate = resolved
 
     sync_margin_based_selling_prices(item_code)
 
 
 def on_item_after_insert(doc, method=None):
-    """Run margin pricing once the Item row exists."""
+    """Persist default selling price, then run margin pricing."""
     item_code = _item_code(doc)
     if not item_code:
         return
 
+    ensure_default_selling_item_price(doc)
     sync_margin_based_selling_prices(item_code, item_doc=doc)
     sync_item_standard_rate(item_code)
 
@@ -428,3 +520,75 @@ def on_item_price_trash(doc, method=None):
     if flt(doc.get("buying")) == 1:
         sync_margin_based_selling_prices(doc.item_code)
     sync_item_standard_rate(doc.item_code)
+
+
+@frappe.whitelist()
+def get_item_price_matrix(item_code: str, current_price_list: str | None = None) -> dict:
+    """
+    Return currently valid selling prices for an item across price lists / UOMs.
+
+    Used by POS and sales document UIs to show a compact price peek popover.
+    """
+    item_code = (item_code or "").strip()
+    if not item_code:
+        return {"item_code": "", "prices": [], "default_price_list": None}
+
+    if not frappe.has_permission("Item Price", "read"):
+        frappe.throw(frappe._("Not permitted"), frappe.PermissionError)
+
+    today = nowdate()
+    default_price_list = get_default_selling_price_list()
+    current_price_list = (current_price_list or "").strip() or None
+
+    rows = frappe.db.sql(
+        """
+        select
+            ip.price_list,
+            ip.uom,
+            ip.price_list_rate,
+            ip.currency,
+            pl.is_default
+        from `tabItem Price` ip
+        inner join `tabPrice List` pl on pl.name = ip.price_list
+        where ip.item_code = %(item_code)s
+          and ifnull(ip.selling, 0) = 1
+          and ifnull(pl.enabled, 0) = 1
+          and ifnull(pl.selling, 0) = 1
+          and ifnull(ip.price_list_rate, 0) > 0
+          and (ip.valid_from is null or ip.valid_from <= %(today)s)
+          and (ip.valid_upto is null or ip.valid_upto >= %(today)s)
+        order by
+            case when ip.price_list = %(current_price_list)s then 0 else 1 end,
+            case when ip.price_list = %(default_price_list)s then 0 else 1 end,
+            pl.name asc,
+            ip.uom asc
+        """,
+        {
+            "item_code": item_code,
+            "today": today,
+            "current_price_list": current_price_list or "",
+            "default_price_list": default_price_list or "",
+        },
+        as_dict=True,
+    )
+
+    prices = []
+    for row in rows:
+        prices.append(
+            {
+                "price_list": row.price_list,
+                "uom": row.uom,
+                "price_list_rate": flt(row.price_list_rate),
+                "currency": row.currency,
+                "is_default": 1 if row.price_list == default_price_list else 0,
+                "is_current": 1 if current_price_list and row.price_list == current_price_list else 0,
+            }
+        )
+
+    return {
+        "item_code": item_code,
+        "item_name": frappe.db.get_value("Item", item_code, "item_name") or item_code,
+        "default_price_list": default_price_list,
+        "current_price_list": current_price_list,
+        "prices": prices,
+    }

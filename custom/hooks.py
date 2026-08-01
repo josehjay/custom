@@ -12,8 +12,18 @@ page_js = {
     "point-of-sale": "public/js/custom_pos_list_view.js",
 }
 
+doctype_js = {
+    "Sales Order": "public/js/item_price_peek_form.js",
+    "Sales Invoice": "public/js/item_price_peek_form.js",
+    "Quotation": "public/js/item_price_peek_form.js",
+    "POS Invoice": "public/js/item_price_peek_form.js",
+}
+
 # Fallback include to ensure POS patch is loaded across route variants/builds.
-app_include_js = "/assets/custom/js/custom_pos_list_view.js"
+app_include_js = [
+    "/assets/custom/js/item_price_peek.js",
+    "/assets/custom/js/custom_pos_list_view.js",
+]
 
 override_whitelisted_methods = {
     "erpnext.stock.get_item_details.get_item_details": (

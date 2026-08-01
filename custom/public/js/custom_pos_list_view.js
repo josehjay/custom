@@ -112,6 +112,9 @@
 			.custom-pos-price-cell {
 				font-weight: 700;
 				color: var(--text-color, #f8fafc);
+				display: inline-flex;
+				align-items: center;
+				gap: 2px;
 			}
 
 			.custom-pos-qty-cell.is-green {
@@ -573,6 +576,19 @@
 			`;
 		};
 
+		function enhancePricePeek(instance) {
+			const $container = instance?.$items_container;
+			if (!$container?.length || !window.custom_item_price_peek) return;
+
+			const priceList =
+				instance?.events?.get_frm?.()?.doc?.selling_price_list ||
+				instance?.events?.get_frm?.doc?.selling_price_list ||
+				instance?.settings?.selling_price_list ||
+				null;
+
+			window.custom_item_price_peek.enhancePosItems($container, () => priceList);
+		}
+
 		ItemSelector.prototype.render_item_list = function (items) {
 			const safeItems = items || [];
 			this[LAST_ITEMS_KEY] = safeItems;
@@ -580,7 +596,9 @@
 			if (!isCustomListEnabled(this) && originalRenderItemList) {
 				removeCustomControls(this);
 				this.$items_container.removeClass("custom-pos-list-view");
-				return originalRenderItemList.call(this, safeItems);
+				const result = originalRenderItemList.call(this, safeItems);
+				enhancePricePeek(this);
+				return result;
 			}
 
 			const nextSignature = buildItemsSignature(safeItems);
@@ -596,7 +614,9 @@
 				this.$items_container.html("");
 				this.$items_container.removeClass("custom-pos-list-view");
 				hidePaginationControls(this);
-				return originalRenderItemList.call(this, safeItems);
+				const result = originalRenderItemList.call(this, safeItems);
+				enhancePricePeek(this);
+				return result;
 			}
 
 			const { pageItems, totalPages, currentPage, totalItems } = getPaginatedItems(this, safeItems);
@@ -619,6 +639,8 @@
 			pageItems.forEach((item) => {
 				this.$items_container.append(this.get_item_html(item));
 			});
+
+			enhancePricePeek(this);
 		};
 
 		ItemSelector.prototype[PATCH_KEY] = true;
