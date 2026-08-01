@@ -8,8 +8,8 @@ app_license = "MIT"
 required_apps = ["erpnext"]
 
 page_js = {
-    "point_of_sale": "public/js/custom_pos_list_view.js",
-    "point-of-sale": "public/js/custom_pos_list_view.js",
+    "point_of_sale": "public/js/pos_extensions.js",
+    "point-of-sale": "public/js/pos_extensions.js",
 }
 
 doctype_js = {
@@ -19,10 +19,11 @@ doctype_js = {
     "POS Invoice": "public/js/item_price_peek_form.js",
 }
 
-# Fallback include to ensure POS patch is loaded across route variants/builds.
+# Desk-wide includes (forms + POS fallback). POS page also loads pos_extensions.js.
 app_include_js = [
     "/assets/custom/js/item_price_peek.js",
     "/assets/custom/js/custom_pos_list_view.js",
+    "/assets/custom/js/pos_extensions.js",
 ]
 
 override_whitelisted_methods = {

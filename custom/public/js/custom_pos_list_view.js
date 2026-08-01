@@ -1,6 +1,7 @@
 (() => {
 	const STYLE_ID = "custom-pos-list-view-style";
 	const PATCH_KEY = "__custom_pos_list_with_images_patched";
+	const PEEK_ASSET = "/assets/custom/js/item_price_peek.js";
 	const ENABLE_FIELD = "use_custom_list_view_with_images";
 	const POLL_INTERVAL_MS = 200;
 	const MAX_WAIT_MS = 20000;
@@ -219,6 +220,31 @@
 				color: var(--text-muted);
 				min-width: 140px;
 				text-align: center;
+			}
+
+			/* Peek button fallback styles (full styles load with item_price_peek.js) */
+			.custom-price-peek-btn {
+				display: inline-flex !important;
+				align-items: center;
+				justify-content: center;
+				width: 22px;
+				height: 22px;
+				min-width: 22px;
+				margin-left: 6px;
+				padding: 0;
+				border: 1px solid #98a2b3;
+				border-radius: 999px;
+				background: #fff;
+				color: #171717;
+				cursor: pointer;
+				line-height: 1;
+				flex-shrink: 0;
+				z-index: 5;
+				font-weight: 700;
+			}
+			.custom-price-peek-btn .peek-icon {
+				font-size: 12px;
+				font-style: normal;
 			}
 		`;
 
@@ -567,6 +593,14 @@
 					</div>
 					<div class="custom-pos-price-cell">
 						${format_currency(priceListRate, item.currency, precision) || 0}
+						<button
+							type="button"
+							class="custom-price-peek-btn"
+							data-item-code="${escape(item.item_code)}"
+							data-uom="${escape(uom)}"
+							title="${__("Other prices")}"
+							aria-label="${__("Show other prices")}"
+						><span class="peek-icon" aria-hidden="true">i</span></button>
 					</div>
 					<div class="custom-pos-uom-cell">${uom}</div>
 					<div class="custom-pos-qty-cell ${qtyMeta.cssClass}">
@@ -576,17 +610,41 @@
 			`;
 		};
 
-		function enhancePricePeek(instance) {
-			const $container = instance?.$items_container;
-			if (!$container?.length || !window.custom_item_price_peek) return;
-
-			const priceList =
+		function getPosPriceList(instance) {
+			return (
 				instance?.events?.get_frm?.()?.doc?.selling_price_list ||
 				instance?.events?.get_frm?.doc?.selling_price_list ||
 				instance?.settings?.selling_price_list ||
-				null;
+				null
+			);
+		}
 
-			window.custom_item_price_peek.enhancePosItems($container, () => priceList);
+		function ensurePeekLib(callback) {
+			if (window.custom_item_price_peek) {
+				callback();
+				return;
+			}
+			if (typeof frappe?.require !== "function") {
+				return;
+			}
+			frappe.require(PEEK_ASSET, () => {
+				if (window.custom_item_price_peek) callback();
+			});
+		}
+
+		function enhancePricePeek(instance) {
+			const $container = instance?.$items_container;
+			if (!$container?.length) return;
+
+			ensurePeekLib(() => {
+				const priceList = getPosPriceList(instance);
+				const getter = () => priceList;
+				if (typeof window.custom_item_price_peek.watchPosContainer === "function") {
+					window.custom_item_price_peek.watchPosContainer($container, getter);
+				} else {
+					window.custom_item_price_peek.enhancePosItems($container, getter);
+				}
+			});
 		}
 
 		ItemSelector.prototype.render_item_list = function (items) {
@@ -658,5 +716,10 @@
 		}, POLL_INTERVAL_MS);
 	}
 
-	initializePatch();
+	// Load peek assets first when available, then patch ItemSelector.
+	if (typeof frappe?.require === "function" && !window.custom_item_price_peek) {
+		frappe.require(PEEK_ASSET, () => initializePatch());
+	} else {
+		initializePatch();
+	}
 })();

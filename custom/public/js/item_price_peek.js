@@ -13,33 +13,47 @@
 		style.id = STYLE_ID;
 		style.textContent = `
 			.custom-price-peek-btn {
-				display: inline-flex;
+				display: inline-flex !important;
 				align-items: center;
 				justify-content: center;
 				width: 22px;
 				height: 22px;
+				min-width: 22px;
 				margin-left: 6px;
 				padding: 0;
-				border: 1px solid var(--border-color);
-				border-radius: var(--border-radius-full, 999px);
-				background: var(--fg-color, var(--card-bg, #fff));
-				color: var(--text-muted);
+				border: 1px solid var(--gray-400, #98a2b3);
+				border-radius: 999px;
+				background: var(--fg-color, #fff);
+				color: var(--primary-color, var(--primary, #171717));
 				cursor: pointer;
 				vertical-align: middle;
 				line-height: 1;
 				flex-shrink: 0;
+				position: relative;
+				z-index: 5;
+				box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
 				transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease;
 			}
 
 			.custom-price-peek-btn:hover,
 			.custom-price-peek-btn.is-open {
-				color: var(--primary);
-				border-color: var(--primary);
-				background: var(--bg-color);
+				color: #fff;
+				border-color: var(--primary-color, var(--primary, #171717));
+				background: var(--primary-color, var(--primary, #171717));
 			}
 
 			.custom-price-peek-btn .peek-icon {
 				font-size: 12px;
+				font-weight: 700;
+				font-style: normal;
+				pointer-events: none;
+			}
+
+			/* POS cards often use overflow:hidden — keep the icon visible */
+			.item-wrapper .custom-price-peek-btn,
+			.custom-pos-list-item .custom-price-peek-btn {
+				opacity: 1;
+				visibility: visible;
 			}
 
 			.custom-price-peek-popover {
@@ -478,6 +492,31 @@
 			});
 	}
 
+	function bindButtonEvents(btn, itemCode, options = {}) {
+		if (!btn || btn.dataset.peekBound === "1") return;
+		btn.dataset.peekBound = "1";
+
+		btn.addEventListener("mouseenter", (e) => {
+			e.stopPropagation();
+			show(btn, itemCode || btn.dataset.itemCode, peekOptionsFrom(btn, options));
+		});
+		btn.addEventListener("mouseleave", () => scheduleHide());
+		btn.addEventListener("mousedown", (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+		});
+		btn.addEventListener("click", (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			const code = itemCode || btn.dataset.itemCode;
+			if (activeAnchor === btn && getPopover().style.display !== "none") {
+				hide();
+			} else {
+				show(btn, code, peekOptionsFrom(btn, options));
+			}
+		});
+	}
+
 	function makeButton(itemCode, options = {}) {
 		injectStyles();
 		const btn = document.createElement("button");
@@ -488,36 +527,9 @@
 		btn.dataset.itemCode = itemCode;
 		if (options.priceList) btn.dataset.priceList = options.priceList;
 		if (options.uom) btn.dataset.uom = options.uom;
-
-		try {
-			if (typeof frappe.utils.icon === "function") {
-				btn.innerHTML = `<span class="peek-icon">${frappe.utils.icon("money-coins-1", "xs")}</span>`;
-			} else {
-				btn.innerHTML = `<span class="peek-icon">¤</span>`;
-			}
-		} catch (e) {
-			btn.innerHTML = `<span class="peek-icon">¤</span>`;
-		}
-
-		btn.addEventListener("mouseenter", (e) => {
-			e.stopPropagation();
-			show(btn, itemCode, peekOptionsFrom(btn, options));
-		});
-		btn.addEventListener("mouseleave", () => scheduleHide());
-		btn.addEventListener("mousedown", (e) => {
-			e.preventDefault();
-			e.stopPropagation();
-		});
-		btn.addEventListener("click", (e) => {
-			e.preventDefault();
-			e.stopPropagation();
-			if (activeAnchor === btn && getPopover().style.display !== "none") {
-				hide();
-			} else {
-				show(btn, itemCode, peekOptionsFrom(btn, options));
-			}
-		});
-
+		// Plain glyph — reliable across Frappe icon sets / dark POS themes.
+		btn.innerHTML = `<span class="peek-icon" aria-hidden="true">i</span>`;
+		bindButtonEvents(btn, itemCode, options);
 		return btn;
 	}
 
@@ -530,6 +542,7 @@
 			btn.dataset.itemCode = itemCode;
 			if (options.priceList) btn.dataset.priceList = options.priceList;
 			if (options.uom) btn.dataset.uom = options.uom;
+			bindButtonEvents(btn, itemCode, options);
 			return btn;
 		}
 
@@ -540,14 +553,22 @@
 		return btn;
 	}
 
+	function findItemCards($container) {
+		const $cards = $container.find(
+			".item-wrapper, .pos-item-wrapper, [data-item-code].item-card, .items-container [data-item-code]"
+		);
+		if ($cards.length) return $cards;
+
+		// Fallback: any descendant with an item code attribute.
+		return $container.find("[data-item-code]");
+	}
+
 	function enhancePosItems($container, getPriceList) {
 		if (!$container?.length) return;
 		injectStyles();
 
-		$container.find(".item-wrapper").each(function () {
+		findItemCards($container).each(function () {
 			const wrapper = this;
-			if (wrapper.querySelector(".custom-price-peek-btn")) return;
-
 			const itemCode = wrapper.getAttribute("data-item-code");
 			if (!itemCode) return;
 
@@ -560,25 +581,56 @@
 				wrapper.getAttribute("data-stock-uom") ||
 				"";
 
+			const existing = wrapper.querySelector(".custom-price-peek-btn");
+			if (existing) {
+				existing.dataset.itemCode = itemCode;
+				if (priceList) existing.dataset.priceList = priceList;
+				if (uom) existing.dataset.uom = uom;
+				bindButtonEvents(existing, itemCode, { priceList, uom });
+				return;
+			}
+
 			let host =
 				wrapper.querySelector(".custom-pos-price-cell") ||
 				wrapper.querySelector(".item-rate") ||
 				wrapper.querySelector(".price-list-rate") ||
 				wrapper.querySelector(".item-price") ||
 				wrapper.querySelector(".item-display .item-rate") ||
+				wrapper.querySelector(".item-name") ||
 				null;
 
 			if (!host) {
 				host = document.createElement("span");
 				host.className = "custom-price-peek-inline";
 				wrapper.appendChild(host);
-			} else if (getComputedStyle(host).display === "block") {
-				host.style.display = "inline-flex";
-				host.style.alignItems = "center";
+			} else {
+				const display = getComputedStyle(host).display;
+				if (display === "block" || display === "flex") {
+					host.style.display = "inline-flex";
+					host.style.alignItems = "center";
+					host.style.flexWrap = "wrap";
+					host.style.gap = "4px";
+				}
 			}
 
 			attachTo(host, itemCode, { priceList, uom });
 		});
+	}
+
+	function watchPosContainer($container, getPriceList) {
+		if (!$container?.length || $container.data("customPeekObserver")) return;
+
+		const run = () => enhancePosItems($container, getPriceList);
+		run();
+
+		const root = $container.get(0);
+		if (!root || typeof MutationObserver === "undefined") return;
+
+		const observer = new MutationObserver(() => {
+			window.requestAnimationFrame(run);
+		});
+		observer.observe(root, { childList: true, subtree: true });
+		$container.data("customPeekObserver", observer);
 	}
 
 	document.addEventListener("click", (e) => {
@@ -598,6 +650,7 @@
 		attachTo,
 		makeButton,
 		enhancePosItems,
+		watchPosContainer,
 		injectStyles,
 	};
 })();

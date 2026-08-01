@@ -174,7 +174,7 @@ git pull
 cd ../..
 
 # 2) Reinstall Python package for this app (picks up new modules)
-bench setup requirements --app custom
+bench setup requirements custom
 # or: ./env/bin/pip install -e apps/custom --quiet
 
 # 3) Run patches / schema for this site
@@ -185,8 +185,19 @@ bench build --app custom
 
 # 5) Clear cache and reload processes
 bench --site <your-site> clear-cache
+bench clear-cache
 bench restart
 ```
+
+After a JS-only update, if POS still shows old UI: hard-refresh the browser
+(Ctrl+Shift+R) or open POS in a private window. Confirm assets exist:
+
+```bash
+ls sites/assets/custom/js/item_price_peek.js \
+   sites/assets/custom/js/custom_pos_list_view.js \
+   sites/assets/custom/js/pos_extensions.js
+```
+
 
 If the bench uses a specific branch:
 
