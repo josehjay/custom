@@ -64,27 +64,27 @@
 				display: inline-flex !important;
 				align-items: center;
 				gap: 4px;
-				flex-wrap: wrap;
+				flex-wrap: nowrap;
 				overflow: visible;
+				white-space: nowrap;
 			}
 
-			.items-container .item-wrapper .item-display {
-				overflow: visible;
+			.items-container.show-item-image .item-wrapper:not(.custom-pos-list-item) {
+				height: auto !important;
 			}
 
-			.items-container .item-wrapper:not(.custom-pos-list-item) > .custom-price-peek-btn {
-				position: absolute;
-				top: 6px;
-				right: 6px;
-				z-index: 8;
-				background: var(--fg-color, rgba(255, 255, 255, 0.92));
-				box-shadow: 0 0 0 1px var(--border-color, rgba(0, 0, 0, 0.08));
-			}
-
-			[data-theme="dark"] .items-container .item-wrapper:not(.custom-pos-list-item) > .custom-price-peek-btn,
-			.dark .items-container .item-wrapper:not(.custom-pos-list-item) > .custom-price-peek-btn,
-			body[data-theme-mode="dark"] .items-container .item-wrapper:not(.custom-pos-list-item) > .custom-price-peek-btn {
-				background: var(--fg-color, rgba(17, 24, 39, 0.92));
+			.items-container.show-item-image .item-wrapper:not(.custom-pos-list-item) .item-name {
+				display: -webkit-box !important;
+				-webkit-box-orient: vertical;
+				-webkit-line-clamp: 2;
+				line-clamp: 2;
+				overflow: hidden;
+				white-space: normal !important;
+				text-overflow: ellipsis;
+				line-height: 1.3;
+				max-height: 2.6em;
+				min-height: 2.6em;
+				word-break: break-word;
 			}
 
 			/* Theme-aware contrast for light / dark desk + POS */
@@ -629,31 +629,26 @@
 				wrapper.getAttribute("data-stock-uom") ||
 				"";
 
+			const host =
+				wrapper.querySelector(".custom-pos-price-cell") ||
+				wrapper.querySelector(".item-rate") ||
+				wrapper.querySelector(".price-list-rate") ||
+				wrapper.querySelector(".item-price") ||
+				null;
+
 			const existing = wrapper.querySelector(".custom-price-peek-btn");
 			if (existing) {
 				existing.dataset.itemCode = itemCode;
 				if (priceList) existing.dataset.priceList = priceList;
 				if (uom) existing.dataset.uom = uom;
+				if (host && existing.parentElement !== host) {
+					host.appendChild(existing);
+				}
 				bindButtonEvents(existing, itemCode, { priceList, uom });
 				return;
 			}
 
-			const isListItem = wrapper.classList.contains("custom-pos-list-item");
-			let host = isListItem
-				? wrapper.querySelector(".custom-pos-price-cell") ||
-				  wrapper.querySelector(".item-rate")
-				: null;
-
-			if (!host && isListItem) {
-				host =
-					wrapper.querySelector(".price-list-rate") ||
-					wrapper.querySelector(".item-price") ||
-					wrapper.querySelector(".item-name") ||
-					null;
-			}
-
 			if (!host) {
-				wrapper.style.position = wrapper.style.position || "relative";
 				attachTo(wrapper, itemCode, { priceList, uom });
 				return;
 			}
@@ -662,7 +657,7 @@
 			if (display === "block" || display === "flex") {
 				host.style.display = "inline-flex";
 				host.style.alignItems = "center";
-				host.style.flexWrap = "wrap";
+				host.style.flexWrap = "nowrap";
 				host.style.gap = "4px";
 			}
 

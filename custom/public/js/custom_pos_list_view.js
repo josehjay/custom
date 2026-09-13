@@ -276,26 +276,27 @@
 				display: inline-flex !important;
 				align-items: center;
 				gap: 4px;
-				flex-wrap: wrap;
+				flex-wrap: nowrap;
 				overflow: visible;
+				white-space: nowrap;
 			}
 
-			.items-container .item-wrapper .item-display {
-				overflow: visible;
+			.items-container.show-item-image .item-wrapper:not(.custom-pos-list-item) {
+				height: auto !important;
 			}
 
-			.items-container .item-wrapper:not(.custom-pos-list-item) > .custom-price-peek-btn {
-				position: absolute;
-				top: 6px;
-				right: 6px;
-				z-index: 8;
-				background: var(--fg-color, rgba(255, 255, 255, 0.92));
-				box-shadow: 0 0 0 1px var(--border-color, rgba(0, 0, 0, 0.08));
-			}
-
-			[data-theme="dark"] .items-container .item-wrapper:not(.custom-pos-list-item) > .custom-price-peek-btn,
-			.dark .items-container .item-wrapper:not(.custom-pos-list-item) > .custom-price-peek-btn {
-				background: var(--fg-color, rgba(17, 24, 39, 0.92));
+			.items-container.show-item-image .item-wrapper:not(.custom-pos-list-item) .item-name {
+				display: -webkit-box !important;
+				-webkit-box-orient: vertical;
+				-webkit-line-clamp: 2;
+				line-clamp: 2;
+				overflow: hidden;
+				white-space: normal !important;
+				text-overflow: ellipsis;
+				line-height: 1.3;
+				max-height: 2.6em;
+				min-height: 2.6em;
+				word-break: break-word;
 			}
 		`;
 
@@ -680,6 +681,8 @@
 
 			if (isPeekEnabled(this)) {
 				html = injectPeekIntoHtml(html, item, getPosPriceList(this));
+			} else {
+				html = expandGridItemNameInHtml(html, item);
 			}
 			return html;
 		};
@@ -731,25 +734,50 @@
 			><span class="peek-icon" aria-hidden="true">i</span></button>`;
 		}
 
+		function getItemWrapper($nodes) {
+			return $nodes
+				.filter(".item-wrapper, .pos-item-wrapper")
+				.add($nodes.find(".item-wrapper, .pos-item-wrapper"))
+				.first();
+		}
+
+		function expandGridItemName($target, item) {
+			if (!$target?.length || $target.hasClass("custom-pos-list-item")) return;
+			const fullName = (item?.item_name || item?.item_code || "").toString();
+			if (!fullName) return;
+			let $name = $target.find(".item-name").first();
+			if (!$name.length) {
+				$name = $target.find(".item-rate").first().prev();
+			}
+			if (!$name.length) return;
+			$name.text(fullName);
+			$name.attr("title", fullName);
+		}
+
+		function expandGridItemNameInHtml(html, item) {
+			if (!html || !item) return html;
+			const $nodes = $(html);
+			const $target = getItemWrapper($nodes);
+			if (!$target.length) return html;
+			expandGridItemName($target, item);
+			return $target.prop("outerHTML") || html;
+		}
+
 		function injectPeekIntoHtml(html, item, priceList) {
 			if (!html || !item?.item_code) return html;
 
 			const $nodes = $(html);
-			const $target = $nodes
-				.filter(".item-wrapper, .pos-item-wrapper")
-				.add($nodes.find(".item-wrapper, .pos-item-wrapper"))
-				.first();
+			const $target = getItemWrapper($nodes);
 			if (!$target.length) return html;
+
+			expandGridItemName($target, item);
+
 			if ($target.find(".custom-price-peek-btn").length) {
 				return $target.prop("outerHTML") || html;
 			}
 
 			const $host = $target.find(".custom-pos-price-cell, .item-rate").first();
-			const isCard = $target.find(".item-display, .item-image, img").length > 0;
-			if (isCard && !$target.hasClass("custom-pos-list-item")) {
-				$target.css("position", "relative");
-				$target.append(peekButtonHtml(item, priceList));
-			} else if ($host.length) {
+			if ($host.length) {
 				$host.append(peekButtonHtml(item, priceList));
 			} else {
 				$target.append(peekButtonHtml(item, priceList));
