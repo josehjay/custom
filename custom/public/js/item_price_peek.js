@@ -7,10 +7,12 @@
 	let activeAnchor = null;
 
 	function injectStyles() {
-		if (document.getElementById(STYLE_ID)) return;
-
-		const style = document.createElement("style");
-		style.id = STYLE_ID;
+		let style = document.getElementById(STYLE_ID);
+		if (!style) {
+			style = document.createElement("style");
+			style.id = STYLE_ID;
+			document.head.appendChild(style);
+		}
 		style.textContent = `
 			.custom-price-peek-btn {
 				display: inline-flex !important;
@@ -71,7 +73,18 @@
 
 			.items-container.show-item-image .item-wrapper:not(.custom-pos-list-item) {
 				height: auto !important;
-				padding-bottom: 10px;
+			}
+
+			.items-container.show-item-image .item-wrapper:not(.custom-pos-list-item) .item-display {
+				margin-bottom: 0 !important;
+			}
+
+			.items-container.show-item-image .item-wrapper:not(.custom-pos-list-item) .item-detail {
+				padding-top: 12px !important;
+				padding-bottom: 12px !important;
+				display: flex;
+				flex-direction: column;
+				gap: 4px;
 			}
 
 			.items-container.show-item-image .item-wrapper:not(.custom-pos-list-item) .item-name {
@@ -79,19 +92,18 @@
 				-webkit-box-orient: vertical;
 				-webkit-line-clamp: 2;
 				line-clamp: 2;
-				overflow: hidden;
+				overflow: hidden !important;
 				white-space: normal !important;
 				text-overflow: ellipsis;
 				line-height: 1.3;
 				max-height: 2.6em;
-				min-height: 2.6em;
-				margin-top: 10px;
+				margin: 0 !important;
 				word-break: break-word;
 			}
 
 			.items-container.show-item-image .item-wrapper:not(.custom-pos-list-item) .item-rate {
-				margin-bottom: 8px;
-				padding-bottom: 4px;
+				margin: 0 !important;
+				padding-bottom: 0 !important;
 			}
 
 			/* Theme-aware contrast for light / dark desk + POS */
@@ -275,7 +287,6 @@
 				gap: 0;
 			}
 		`;
-		document.head.appendChild(style);
 	}
 
 	function escapeHtml(value) {

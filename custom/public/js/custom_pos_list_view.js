@@ -19,10 +19,12 @@
 	const profilePeekCache = {};
 
 	function injectStyles() {
-		if (document.getElementById(STYLE_ID)) return;
-
-		const style = document.createElement("style");
-		style.id = STYLE_ID;
+		let style = document.getElementById(STYLE_ID);
+		if (!style) {
+			style = document.createElement("style");
+			style.id = STYLE_ID;
+			document.head.appendChild(style);
+		}
 		style.textContent = `
 			.items-container.custom-pos-list-view {
 				display: flex !important;
@@ -283,7 +285,18 @@
 
 			.items-container.show-item-image .item-wrapper:not(.custom-pos-list-item) {
 				height: auto !important;
-				padding-bottom: 10px;
+			}
+
+			.items-container.show-item-image .item-wrapper:not(.custom-pos-list-item) .item-display {
+				margin-bottom: 0 !important;
+			}
+
+			.items-container.show-item-image .item-wrapper:not(.custom-pos-list-item) .item-detail {
+				padding-top: 12px !important;
+				padding-bottom: 12px !important;
+				display: flex;
+				flex-direction: column;
+				gap: 4px;
 			}
 
 			.items-container.show-item-image .item-wrapper:not(.custom-pos-list-item) .item-name {
@@ -291,23 +304,21 @@
 				-webkit-box-orient: vertical;
 				-webkit-line-clamp: 2;
 				line-clamp: 2;
-				overflow: hidden;
+				overflow: hidden !important;
 				white-space: normal !important;
 				text-overflow: ellipsis;
 				line-height: 1.3;
 				max-height: 2.6em;
-				min-height: 2.6em;
-				margin-top: 10px;
+				margin: 0 !important;
 				word-break: break-word;
 			}
 
 			.items-container.show-item-image .item-wrapper:not(.custom-pos-list-item) .item-rate {
-				margin-bottom: 8px;
-				padding-bottom: 4px;
+				margin: 0 !important;
+				padding-bottom: 0 !important;
 			}
 		`;
 
-		document.head.appendChild(style);
 	}
 
 	function formatQty(actualQty) {
@@ -682,6 +693,7 @@
 			let html;
 			if (!useCustomList && originalGetItemHtml) {
 				html = originalGetItemHtml.call(this, item);
+				html = restoreFullItemNameInHtml(html, item);
 			} else {
 				html = buildCustomListItemHtml(item);
 			}
@@ -748,14 +760,46 @@
 				.first();
 		}
 
+		function restoreFullItemNameInHtml(html, item) {
+			const fullName = (item?.item_name || item?.item_code || "").toString();
+			if (!html || !fullName) return html;
+
+			const escaped = frappe.utils.escape_html(fullName);
+			const clipped =
+				typeof frappe.ellipsis === "function" ? frappe.ellipsis(escaped, 18) : escaped;
+			if (clipped && clipped !== escaped && html.includes(clipped)) {
+				return html.replace(clipped, escaped);
+			}
+			return html;
+		}
+
+		function applyGridItemNames(instance) {
+			const $container = instance?.$items_container;
+			if (!$container?.length) return;
+
+			const names = {};
+			(instance[LAST_ITEMS_KEY] || []).forEach((row) => {
+				if (row?.item_code) {
+					names[row.item_code] = row.item_name || row.item_code;
+				}
+			});
+
+			$container.find(".item-wrapper:not(.custom-pos-list-item)").each(function () {
+				const code = this.getAttribute("data-item-code");
+				const fullName = names[code] || this.getAttribute("title") || "";
+				if (!fullName) return;
+				const nameEl = this.querySelector(".item-name");
+				if (!nameEl) return;
+				nameEl.textContent = fullName;
+				nameEl.setAttribute("title", fullName);
+			});
+		}
+
 		function expandGridItemName($target, item) {
 			if (!$target?.length || $target.hasClass("custom-pos-list-item")) return;
 			const fullName = (item?.item_name || item?.item_code || "").toString();
 			if (!fullName) return;
-			let $name = $target.find(".item-name").first();
-			if (!$name.length) {
-				$name = $target.find(".item-rate").first().prev();
-			}
+			const $name = $target.find(".item-name").first();
 			if (!$name.length) return;
 			$name.text(fullName);
 			$name.attr("title", fullName);
@@ -843,6 +887,7 @@
 				removeCustomControls(this);
 				this.$items_container.removeClass("custom-pos-list-view");
 				const result = originalRenderItemList.call(this, safeItems);
+				applyGridItemNames(this);
 				enhancePricePeek(this);
 				return result;
 			}
@@ -861,6 +906,7 @@
 				this.$items_container.removeClass("custom-pos-list-view");
 				hidePaginationControls(this);
 				const result = originalRenderItemList.call(this, safeItems);
+				applyGridItemNames(this);
 				enhancePricePeek(this);
 				return result;
 			}
