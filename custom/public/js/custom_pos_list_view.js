@@ -269,76 +269,37 @@
 				background: var(--subtle-fg, rgba(255, 255, 255, 0.08));
 			}
 
-			.items-container .item-wrapper {
-				position: relative;
-			}
-
 			.items-container .item-wrapper .item-rate,
 			.items-container .item-wrapper .custom-pos-price-cell {
-				display: inline-flex !important;
+				display: inline-flex;
 				align-items: center;
 				gap: 4px;
-				flex-wrap: nowrap;
-				overflow: visible;
-				white-space: nowrap;
 			}
 
-			.items-container.show-item-image {
-				align-items: start;
+			/* Native grid cards: image is 8rem with side/top margin and no bottom margin.
+			   item-detail is a fixed 3.5rem nowrap row. Only adjust those two facts. */
+			.items-container.show-item-image > .item-wrapper .item-display {
+				margin-bottom: 8px !important;
 			}
 
-			.items-container.show-item-image .item-wrapper:not(.custom-pos-list-item) {
-				display: flex !important;
-				flex-direction: column !important;
+			.items-container.show-item-image > .item-wrapper > .item-detail {
 				height: auto !important;
-				min-height: 0 !important;
-				overflow: hidden;
-				padding-bottom: 8px !important;
+				min-height: 3.5rem;
+				justify-content: flex-start !important;
+				padding-bottom: 8px;
 			}
 
-			.items-container.show-item-image .item-wrapper:not(.custom-pos-list-item) .item-display,
-			.items-container.show-item-image .item-wrapper:not(.custom-pos-list-item) .item-display.abbr {
-				flex: 0 0 7.25rem !important;
-				height: 7.25rem !important;
-				min-height: 7.25rem !important;
-				max-height: 7.25rem !important;
-				margin: 0 !important;
-				overflow: hidden !important;
-				position: relative !important;
-			}
-
-			.items-container.show-item-image .item-wrapper:not(.custom-pos-list-item) .item-detail {
-				flex: 0 0 auto !important;
-				position: relative;
-				z-index: 2;
-				margin-top: 8px !important;
-				padding: 0 10px !important;
-				display: flex;
-				flex-direction: column;
-				gap: 4px;
-				background: var(--fg-color, var(--card-bg, #fff));
-			}
-
-			.items-container.show-item-image .item-wrapper:not(.custom-pos-list-item) .item-name {
+			.items-container.show-item-image > .item-wrapper > .item-detail > .item-name {
 				display: -webkit-box !important;
-				-webkit-box-orient: vertical;
-				-webkit-line-clamp: 2;
+				-webkit-box-orient: vertical !important;
+				-webkit-line-clamp: 2 !important;
 				line-clamp: 2;
-				overflow: hidden !important;
 				white-space: normal !important;
+				overflow: hidden !important;
 				text-overflow: ellipsis;
+				align-items: unset !important;
 				line-height: 1.3;
-				min-height: 2.6em;
 				max-height: 2.6em;
-				margin: 0 !important;
-				word-break: break-word;
-				visibility: visible !important;
-				opacity: 1 !important;
-			}
-
-			.items-container.show-item-image .item-wrapper:not(.custom-pos-list-item) .item-rate {
-				margin: 0 !important;
-				padding: 0 !important;
 			}
 		`;
 
