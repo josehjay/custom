@@ -55,6 +55,38 @@
 				visibility: visible;
 			}
 
+			.items-container .item-wrapper {
+				position: relative;
+			}
+
+			.items-container .item-wrapper .item-rate,
+			.items-container .item-wrapper .custom-pos-price-cell {
+				display: inline-flex !important;
+				align-items: center;
+				gap: 4px;
+				flex-wrap: wrap;
+				overflow: visible;
+			}
+
+			.items-container .item-wrapper .item-display {
+				overflow: visible;
+			}
+
+			.items-container .item-wrapper:not(.custom-pos-list-item) > .custom-price-peek-btn {
+				position: absolute;
+				top: 6px;
+				right: 6px;
+				z-index: 8;
+				background: var(--fg-color, rgba(255, 255, 255, 0.92));
+				box-shadow: 0 0 0 1px var(--border-color, rgba(0, 0, 0, 0.08));
+			}
+
+			[data-theme="dark"] .items-container .item-wrapper:not(.custom-pos-list-item) > .custom-price-peek-btn,
+			.dark .items-container .item-wrapper:not(.custom-pos-list-item) > .custom-price-peek-btn,
+			body[data-theme-mode="dark"] .items-container .item-wrapper:not(.custom-pos-list-item) > .custom-price-peek-btn {
+				background: var(--fg-color, rgba(17, 24, 39, 0.92));
+			}
+
 			/* Theme-aware contrast for light / dark desk + POS */
 			[data-theme="dark"] .custom-price-peek-btn,
 			.dark .custom-price-peek-btn,
@@ -606,27 +638,32 @@
 				return;
 			}
 
-			let host =
-				wrapper.querySelector(".custom-pos-price-cell") ||
-				wrapper.querySelector(".item-rate") ||
-				wrapper.querySelector(".price-list-rate") ||
-				wrapper.querySelector(".item-price") ||
-				wrapper.querySelector(".item-display .item-rate") ||
-				wrapper.querySelector(".item-name") ||
-				null;
+			const isListItem = wrapper.classList.contains("custom-pos-list-item");
+			let host = isListItem
+				? wrapper.querySelector(".custom-pos-price-cell") ||
+				  wrapper.querySelector(".item-rate")
+				: null;
+
+			if (!host && isListItem) {
+				host =
+					wrapper.querySelector(".price-list-rate") ||
+					wrapper.querySelector(".item-price") ||
+					wrapper.querySelector(".item-name") ||
+					null;
+			}
 
 			if (!host) {
-				host = document.createElement("span");
-				host.className = "custom-price-peek-inline";
-				wrapper.appendChild(host);
-			} else {
-				const display = getComputedStyle(host).display;
-				if (display === "block" || display === "flex") {
-					host.style.display = "inline-flex";
-					host.style.alignItems = "center";
-					host.style.flexWrap = "wrap";
-					host.style.gap = "4px";
-				}
+				wrapper.style.position = wrapper.style.position || "relative";
+				attachTo(wrapper, itemCode, { priceList, uom });
+				return;
+			}
+
+			const display = getComputedStyle(host).display;
+			if (display === "block" || display === "flex") {
+				host.style.display = "inline-flex";
+				host.style.alignItems = "center";
+				host.style.flexWrap = "wrap";
+				host.style.gap = "4px";
 			}
 
 			attachTo(host, itemCode, { priceList, uom });
@@ -634,7 +671,8 @@
 	}
 
 	function watchPosContainer($container, getPriceList) {
-		if (!$container?.length || $container.data("customPeekObserver")) return;
+		if (!$container?.length) return;
+		injectStyles();
 
 		const run = () => enhancePosItems($container, getPriceList);
 		run();
@@ -642,11 +680,18 @@
 		const root = $container.get(0);
 		if (!root || typeof MutationObserver === "undefined") return;
 
+		const existing = $container.data("customPeekObserver");
+		if (existing?.root === root) return;
+
+		if (existing?.observer) {
+			existing.observer.disconnect();
+		}
+
 		const observer = new MutationObserver(() => {
 			window.requestAnimationFrame(run);
 		});
 		observer.observe(root, { childList: true, subtree: true });
-		$container.data("customPeekObserver", observer);
+		$container.data("customPeekObserver", { observer, root });
 	}
 
 	document.addEventListener("click", (e) => {

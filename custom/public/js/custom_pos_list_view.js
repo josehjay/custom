@@ -3,6 +3,7 @@
 	const PATCH_KEY = "__custom_pos_list_with_images_patched";
 	const PEEK_ASSET = "/assets/custom/js/item_price_peek.js";
 	const ENABLE_FIELD = "use_custom_list_view_with_images";
+	const PEEK_FIELD = "show_other_pricelists_in_pos";
 	const POLL_INTERVAL_MS = 200;
 	const MAX_WAIT_MS = 20000;
 	const VIEW_MODE_KEY = "__custom_pos_view_mode";
@@ -11,9 +12,11 @@
 	const CURRENT_PAGE_KEY = "__custom_pos_current_page";
 	const PAGE_SIZE_KEY = "__custom_pos_page_size";
 	const ENABLE_STATE_KEY = "__custom_pos_enable_state";
+	const PEEK_STATE_KEY = "__custom_pos_peek_state";
 	const ENABLE_FETCH_PROMISE_KEY = "__custom_pos_enable_fetch_promise";
 	const DEFAULT_PAGE_SIZE = 24;
 	const profileEnableCache = {};
+	const profilePeekCache = {};
 
 	function injectStyles() {
 		if (document.getElementById(STYLE_ID)) return;
@@ -263,6 +266,37 @@
 				color: var(--primary-color, var(--primary, #fff));
 				background: var(--subtle-fg, rgba(255, 255, 255, 0.08));
 			}
+
+			.items-container .item-wrapper {
+				position: relative;
+			}
+
+			.items-container .item-wrapper .item-rate,
+			.items-container .item-wrapper .custom-pos-price-cell {
+				display: inline-flex !important;
+				align-items: center;
+				gap: 4px;
+				flex-wrap: wrap;
+				overflow: visible;
+			}
+
+			.items-container .item-wrapper .item-display {
+				overflow: visible;
+			}
+
+			.items-container .item-wrapper:not(.custom-pos-list-item) > .custom-price-peek-btn {
+				position: absolute;
+				top: 6px;
+				right: 6px;
+				z-index: 8;
+				background: var(--fg-color, rgba(255, 255, 255, 0.92));
+				box-shadow: 0 0 0 1px var(--border-color, rgba(0, 0, 0, 0.08));
+			}
+
+			[data-theme="dark"] .items-container .item-wrapper:not(.custom-pos-list-item) > .custom-price-peek-btn,
+			.dark .items-container .item-wrapper:not(.custom-pos-list-item) > .custom-price-peek-btn {
+				background: var(--fg-color, rgba(17, 24, 39, 0.92));
+			}
 		`;
 
 		document.head.appendChild(style);
@@ -301,9 +335,18 @@
 	}
 
 	function isCustomListEnabled(instance) {
-		maybeResolveEnableState(instance);
-		maybeFetchEnableState(instance);
+		maybeResolveProfileFlags(instance);
+		maybeFetchProfileFlags(instance);
 		return normalizeBool(instance?.[ENABLE_STATE_KEY]);
+	}
+
+	function isPeekEnabled(instance) {
+		maybeResolveProfileFlags(instance);
+		maybeFetchProfileFlags(instance);
+		if (instance?.[PEEK_STATE_KEY] === undefined || instance?.[PEEK_STATE_KEY] === null) {
+			return true;
+		}
+		return normalizeBool(instance[PEEK_STATE_KEY]);
 	}
 
 	function normalizeBool(value) {
@@ -315,49 +358,91 @@
 			instance?.settings?.pos_profile ||
 			instance?.pos_profile?.name ||
 			(typeof instance?.pos_profile === "string" ? instance.pos_profile : null) ||
+			instance?.settings?.name ||
+			instance?.events?.get_frm?.()?.doc?.pos_profile ||
 			instance?.events?.get_frm?.doc?.pos_profile ||
 			null
 		);
 	}
 
-	function maybeResolveEnableState(instance) {
-		const valueFromRuntime =
-			instance?.settings?.[ENABLE_FIELD] ??
-			instance?.pos_profile?.[ENABLE_FIELD] ??
-			instance?.events?.get_frm?.doc?.[ENABLE_FIELD] ??
-			null;
+	function readRuntimeField(instance, fieldname) {
+		const frmDoc = instance?.events?.get_frm?.()?.doc || instance?.events?.get_frm?.doc;
+		return (
+			instance?.settings?.[fieldname] ??
+			instance?.pos_profile?.[fieldname] ??
+			frmDoc?.[fieldname] ??
+			null
+		);
+	}
 
-		if (valueFromRuntime !== null && valueFromRuntime !== undefined) {
-			instance[ENABLE_STATE_KEY] = normalizeBool(valueFromRuntime);
-			return;
+	function maybeResolveProfileFlags(instance) {
+		const listViewFromRuntime = readRuntimeField(instance, ENABLE_FIELD);
+		if (listViewFromRuntime !== null && listViewFromRuntime !== undefined) {
+			instance[ENABLE_STATE_KEY] = normalizeBool(listViewFromRuntime);
+		} else {
+			const profileName = getPosProfileName(instance);
+			if (profileName && profileEnableCache[profileName] !== undefined) {
+				instance[ENABLE_STATE_KEY] = profileEnableCache[profileName];
+			}
 		}
 
-		const profileName = getPosProfileName(instance);
-		if (profileName && profileEnableCache[profileName] !== undefined) {
-			instance[ENABLE_STATE_KEY] = profileEnableCache[profileName];
+		const peekFromRuntime = readRuntimeField(instance, PEEK_FIELD);
+		if (peekFromRuntime !== null && peekFromRuntime !== undefined) {
+			instance[PEEK_STATE_KEY] = normalizeBool(peekFromRuntime);
+		} else {
+			const profileName = getPosProfileName(instance);
+			if (profileName && profilePeekCache[profileName] !== undefined) {
+				instance[PEEK_STATE_KEY] = profilePeekCache[profileName];
+			}
 		}
 	}
 
-	function maybeFetchEnableState(instance) {
+	function maybeFetchProfileFlags(instance) {
 		const profileName = getPosProfileName(instance);
-		if (!profileName || profileEnableCache[profileName] !== undefined) return;
+		if (!profileName) return;
+		const listCached = profileEnableCache[profileName] !== undefined;
+		const peekCached = profilePeekCache[profileName] !== undefined;
+		if (listCached && peekCached) return;
+
+		const listFromRuntime = readRuntimeField(instance, ENABLE_FIELD);
+		const peekFromRuntime = readRuntimeField(instance, PEEK_FIELD);
+		if (listFromRuntime !== null && listFromRuntime !== undefined) {
+			profileEnableCache[profileName] = normalizeBool(listFromRuntime);
+			instance[ENABLE_STATE_KEY] = profileEnableCache[profileName];
+		}
+		if (peekFromRuntime !== null && peekFromRuntime !== undefined) {
+			profilePeekCache[profileName] = normalizeBool(peekFromRuntime);
+			instance[PEEK_STATE_KEY] = profilePeekCache[profileName];
+		}
+		if (profileEnableCache[profileName] !== undefined && profilePeekCache[profileName] !== undefined) {
+			return;
+		}
+
 		if (instance?.[ENABLE_FETCH_PROMISE_KEY]) return;
 		if (!frappe?.db?.get_value) return;
 
 		instance[ENABLE_FETCH_PROMISE_KEY] = frappe.db
-			.get_value("POS Profile", profileName, ENABLE_FIELD)
+			.get_value("POS Profile", profileName, [ENABLE_FIELD, PEEK_FIELD])
 			.then((response) => {
-				const value = response?.message?.[ENABLE_FIELD];
-				const enabled = normalizeBool(value);
-				profileEnableCache[profileName] = enabled;
-				instance[ENABLE_STATE_KEY] = enabled;
+				const message = response?.message || {};
+				const listEnabled = normalizeBool(message[ENABLE_FIELD]);
+				const peekEnabled =
+					message[PEEK_FIELD] === undefined || message[PEEK_FIELD] === null
+						? true
+						: normalizeBool(message[PEEK_FIELD]);
+				profileEnableCache[profileName] = listEnabled;
+				profilePeekCache[profileName] = peekEnabled;
+				instance[ENABLE_STATE_KEY] = listEnabled;
+				instance[PEEK_STATE_KEY] = peekEnabled;
 				if (typeof instance?.render_item_list === "function") {
 					instance.render_item_list(instance[LAST_ITEMS_KEY] || []);
 				}
 			})
 			.catch(() => {
 				profileEnableCache[profileName] = false;
+				profilePeekCache[profileName] = true;
 				instance[ENABLE_STATE_KEY] = false;
+				instance[PEEK_STATE_KEY] = true;
 			})
 			.finally(() => {
 				instance[ENABLE_FETCH_PROMISE_KEY] = null;
@@ -566,7 +651,10 @@
 		const originalRenderItemList = ItemSelector.prototype.render_item_list;
 
 		ItemSelector.prototype.render_item_list_column_header = function () {
-			if (getCurrentViewMode(this) === "grid" && originalRenderItemListColumnHeader) {
+			if (
+				(!isCustomListEnabled(this) || getCurrentViewMode(this) === "grid") &&
+				originalRenderItemListColumnHeader
+			) {
 				return originalRenderItemListColumnHeader.call(this);
 			}
 
@@ -582,10 +670,21 @@
 		};
 
 		ItemSelector.prototype.get_item_html = function (item) {
-			if (getCurrentViewMode(this) === "grid" && originalGetItemHtml) {
-				return originalGetItemHtml.call(this, item);
+			const useCustomList = isCustomListEnabled(this) && getCurrentViewMode(this) === "list";
+			let html;
+			if (!useCustomList && originalGetItemHtml) {
+				html = originalGetItemHtml.call(this, item);
+			} else {
+				html = buildCustomListItemHtml(item);
 			}
 
+			if (isPeekEnabled(this)) {
+				html = injectPeekIntoHtml(html, item, getPosPriceList(this));
+			}
+			return html;
+		};
+
+		function buildCustomListItemHtml(item) {
 			const { serial_no, batch_no } = item;
 			const uom = item.uom || item.stock_uom || "";
 			const priceListRate = item.price_list_rate || 0;
@@ -610,14 +709,6 @@
 					</div>
 					<div class="custom-pos-price-cell">
 						${format_currency(priceListRate, item.currency, precision) || 0}
-						<button
-							type="button"
-							class="custom-price-peek-btn"
-							data-item-code="${escape(item.item_code)}"
-							data-uom="${escape(uom)}"
-							title="${__("Other prices")}"
-							aria-label="${__("Show other prices")}"
-						><span class="peek-icon" aria-hidden="true">i</span></button>
 					</div>
 					<div class="custom-pos-uom-cell">${uom}</div>
 					<div class="custom-pos-qty-cell ${qtyMeta.cssClass}">
@@ -625,13 +716,54 @@
 					</div>
 				</div>
 			`;
-		};
+		}
+
+		function peekButtonHtml(item, priceList) {
+			const uom = item.uom || item.stock_uom || "";
+			return `<button
+				type="button"
+				class="custom-price-peek-btn"
+				data-item-code="${escape(item.item_code)}"
+				data-uom="${escape(uom)}"
+				data-price-list="${escape(priceList || "")}"
+				title="${__("Other prices")}"
+				aria-label="${__("Show other prices")}"
+			><span class="peek-icon" aria-hidden="true">i</span></button>`;
+		}
+
+		function injectPeekIntoHtml(html, item, priceList) {
+			if (!html || !item?.item_code) return html;
+
+			const $nodes = $(html);
+			const $target = $nodes
+				.filter(".item-wrapper, .pos-item-wrapper")
+				.add($nodes.find(".item-wrapper, .pos-item-wrapper"))
+				.first();
+			if (!$target.length) return html;
+			if ($target.find(".custom-price-peek-btn").length) {
+				return $target.prop("outerHTML") || html;
+			}
+
+			const $host = $target.find(".custom-pos-price-cell, .item-rate").first();
+			const isCard = $target.find(".item-display, .item-image, img").length > 0;
+			if (isCard && !$target.hasClass("custom-pos-list-item")) {
+				$target.css("position", "relative");
+				$target.append(peekButtonHtml(item, priceList));
+			} else if ($host.length) {
+				$host.append(peekButtonHtml(item, priceList));
+			} else {
+				$target.append(peekButtonHtml(item, priceList));
+			}
+
+			return $target.prop("outerHTML") || html;
+		}
 
 		function getPosPriceList(instance) {
+			const frmDoc = instance?.events?.get_frm?.()?.doc || instance?.events?.get_frm?.doc;
 			return (
-				instance?.events?.get_frm?.()?.doc?.selling_price_list ||
-				instance?.events?.get_frm?.doc?.selling_price_list ||
+				frmDoc?.selling_price_list ||
 				instance?.settings?.selling_price_list ||
+				instance?.price_list ||
 				null
 			);
 		}
@@ -653,9 +785,13 @@
 			const $container = instance?.$items_container;
 			if (!$container?.length) return;
 
+			if (!isPeekEnabled(instance)) {
+				$container.find(".custom-price-peek-btn").remove();
+				return;
+			}
+
 			ensurePeekLib(() => {
-				const priceList = getPosPriceList(instance);
-				const getter = () => priceList;
+				const getter = () => getPosPriceList(instance);
 				if (typeof window.custom_item_price_peek.watchPosContainer === "function") {
 					window.custom_item_price_peek.watchPosContainer($container, getter);
 				} else {

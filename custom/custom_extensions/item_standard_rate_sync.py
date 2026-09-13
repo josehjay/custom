@@ -536,6 +536,53 @@ def _extract_item_context(args, kwargs) -> frappe._dict:
     return frappe._dict(frappe.parse_json(raw_args or {}) or {})
 
 
+def _apply_default_pricelist_fallback_to_pos_items(items: list) -> None:
+    """Fill missing POS selector rates from the default selling price list."""
+    if not items:
+        return
+
+    default_price_list = get_default_selling_price_list()
+    if not default_price_list:
+        return
+
+    default_currency = frappe.db.get_value("Price List", default_price_list, "currency")
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        if flt(item.get("price_list_rate")) > 0:
+            continue
+        item_code = (item.get("item_code") or "").strip()
+        if not item_code:
+            continue
+        fallback_rate = get_default_price_list_rate(item_code, default_price_list)
+        if fallback_rate <= 0:
+            continue
+        item["price_list_rate"] = fallback_rate
+        if not item.get("currency") and default_currency:
+            item["currency"] = default_currency
+
+
+@frappe.whitelist()
+def get_pos_items_with_default_pricelist_fallback(*args, **kwargs):
+    """
+    Wrap POS item search so missing current-list rates still display.
+    """
+    from erpnext.selling.page.point_of_sale.point_of_sale import get_items as erpnext_get_items
+
+    result = erpnext_get_items(*args, **kwargs)
+    if not result:
+        return result
+
+    if isinstance(result, dict):
+        _apply_default_pricelist_fallback_to_pos_items(result.get("items") or [])
+        return result
+
+    if isinstance(result, list):
+        _apply_default_pricelist_fallback_to_pos_items(result)
+
+    return result
+
+
 def get_item_details_with_default_pricelist_fallback(*args, **kwargs):
     """
     Wrap ERPNext item details so missing customer price falls back to default list.

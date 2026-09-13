@@ -30,12 +30,24 @@ This app patches ERPNext POS `ItemSelector` on the POS page and adds:
 - Client-side pagination (default page size: 24).
 - Compatible with `point_of_sale` and `point-of-sale` routes.
 
-Enable/disable is controlled by a POS Profile checkbox:
+Enable/disable is controlled by POS Profile checkboxes under **POS Configuration** / **POS Item Selector**:
 
 - Field: `use_custom_list_view_with_images`
 - Label: `Use Custom List View with Images`
+- Field: `show_other_pricelists_in_pos`
+- Label: `Show Other Price Lists`
 
-If disabled, ERPNext default item selector rendering is used.
+If list view is disabled, ERPNext default item selector rendering is used.
+
+### 1b) POS item prices always visible
+
+POS item cards always show a selling rate:
+
+- Uses the current POS / customer selling price list when a valid rate exists.
+- If that list has no rate for the item, the default selling price list rate is shown instead.
+- The same fallback is used when adding an item to the cart.
+
+Other selling price lists are shown on each POS item via an `i` peek button (grid and list). This is on by default and controlled by `Show Other Price Lists` on the POS Profile.
 
 ### 2) Default price list as source of truth for Item standard selling rate
 
@@ -102,7 +114,7 @@ Users can manually adjust an item price in a margin-managed selling price list, 
 
 ### 5) Price lookup fallback for customer-assigned price lists
 
-When ERPNext fetches item details and selected selling price list has no rate for that item:
+When ERPNext fetches item details or POS item cards and the selected selling price list has no rate for that item:
 
 - App falls back to rate from default selling price list.
 - Returned `price_list_rate` (and `rate` if empty) uses default price list value.
@@ -110,10 +122,12 @@ When ERPNext fetches item details and selected selling price list has no rate fo
 This is implemented by overriding:
 
 - `erpnext.stock.get_item_details.get_item_details`
+- `erpnext.selling.page.point_of_sale.point_of_sale.get_items`
 
 with:
 
 - `custom.custom_extensions.item_standard_rate_sync.get_item_details_with_default_pricelist_fallback`
+- `custom.custom_extensions.item_standard_rate_sync.get_pos_items_with_default_pricelist_fallback`
 
 ## Patches and schema changes
 
@@ -133,6 +147,8 @@ This app applies patches in `custom/patches.txt`:
    - Adds price-list child table for per-item-group margin overrides.
 7. `v0_0_7.remove_item_group_pricing_automation_fields`
    - Removes Item Group-level pricing automation fields; pricing is now controlled in Price List only.
+8. `v0_0_8.add_show_other_pricelists_pos_profile_field`
+   - Adds POS Profile `Show Other Price Lists` toggle under POS Configuration.
 
 ## Hooks used
 
@@ -147,6 +163,7 @@ Defined in `custom/hooks.py`:
   - `Item Price.on_trash`
 - `override_whitelisted_methods`:
   - `erpnext.stock.get_item_details.get_item_details`
+  - `erpnext.selling.page.point_of_sale.point_of_sale.get_items`
 
 ## Installation / update
 
@@ -231,7 +248,9 @@ Skip a bump when needed: `SKIP_VERSION_BUMP=1 git push`.
 
 ## Recommended configuration checklist
 
-1. In `POS Profile`, set `Use Custom List View with Images` as needed.
+1. In `POS Profile` (POS Configuration):
+   - set `Use Custom List View with Images` as needed
+   - set `Show Other Price Lists` to show or hide other selling lists on POS items
 2. In `Selling Settings`, set `selling_price_list` (default selling list).
 3. In `Buying Settings`, set `buying_price_list` (default buying list).
 4. For each selling `Price List` that should auto-calculate:

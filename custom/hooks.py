@@ -29,7 +29,10 @@ app_include_js = [
 override_whitelisted_methods = {
     "erpnext.stock.get_item_details.get_item_details": (
         "custom.custom_extensions.item_standard_rate_sync.get_item_details_with_default_pricelist_fallback"
-    )
+    ),
+    "erpnext.selling.page.point_of_sale.point_of_sale.get_items": (
+        "custom.custom_extensions.item_standard_rate_sync.get_pos_items_with_default_pricelist_fallback"
+    ),
 }
 
 doc_events = {
@@ -58,6 +61,7 @@ fixtures = [
                 "in",
                 [
                     "POS Profile-use_custom_list_view_with_images",
+                    "POS Profile-show_other_pricelists_in_pos",
                 ],
             ]
         ],

@@ -9,5 +9,16 @@
     "label": "Use Custom List View with Images",
     "default": "0",
     "description": "Enable custom POS item list view with images."
+  },
+  {
+    "doctype": "Custom Field",
+    "name": "POS Profile-show_other_pricelists_in_pos",
+    "dt": "POS Profile",
+    "fieldname": "show_other_pricelists_in_pos",
+    "fieldtype": "Check",
+    "insert_after": "use_custom_list_view_with_images",
+    "label": "Show Other Price Lists",
+    "default": "1",
+    "description": "Show other selling price lists on POS item cards."
   }
 ]
