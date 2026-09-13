@@ -283,6 +283,7 @@
 
 			.items-container.show-item-image .item-wrapper:not(.custom-pos-list-item) {
 				height: auto !important;
+				padding-bottom: 10px;
 			}
 
 			.items-container.show-item-image .item-wrapper:not(.custom-pos-list-item) .item-name {
@@ -296,7 +297,13 @@
 				line-height: 1.3;
 				max-height: 2.6em;
 				min-height: 2.6em;
+				margin-top: 10px;
 				word-break: break-word;
+			}
+
+			.items-container.show-item-image .item-wrapper:not(.custom-pos-list-item) .item-rate {
+				margin-bottom: 8px;
+				padding-bottom: 4px;
 			}
 		`;
 
