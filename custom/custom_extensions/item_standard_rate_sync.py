@@ -563,13 +563,27 @@ def _apply_default_pricelist_fallback_to_pos_items(items: list) -> None:
 
 
 @frappe.whitelist()
-def get_pos_items_with_default_pricelist_fallback(*args, **kwargs):
+def get_pos_items_with_default_pricelist_fallback(
+    start,
+    page_length,
+    price_list,
+    item_group,
+    pos_profile,
+    search_term="",
+):
     """
     Wrap POS item search so missing current-list rates still display.
     """
     from erpnext.selling.page.point_of_sale.point_of_sale import get_items as erpnext_get_items
 
-    result = erpnext_get_items(*args, **kwargs)
+    result = erpnext_get_items(
+        start=start,
+        page_length=page_length,
+        price_list=price_list,
+        item_group=item_group,
+        pos_profile=pos_profile,
+        search_term=search_term,
+    )
     if not result:
         return result
 
