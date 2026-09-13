@@ -71,20 +71,38 @@
 				white-space: nowrap;
 			}
 
-			.items-container.show-item-image .item-wrapper:not(.custom-pos-list-item) {
-				height: auto !important;
+			.items-container.show-item-image {
+				align-items: stretch;
+				grid-auto-rows: minmax(13.5rem, auto);
 			}
 
-			.items-container.show-item-image .item-wrapper:not(.custom-pos-list-item) .item-display {
+			.items-container.show-item-image .item-wrapper:not(.custom-pos-list-item) {
+				display: flex !important;
+				flex-direction: column !important;
+				height: auto !important;
+				min-height: 13.5rem !important;
+				overflow: hidden;
+			}
+
+			.items-container.show-item-image .item-wrapper:not(.custom-pos-list-item) .item-display,
+			.items-container.show-item-image .item-wrapper:not(.custom-pos-list-item) .item-display.abbr {
+				flex: 0 0 7.25rem !important;
+				height: 7.25rem !important;
+				min-height: 7.25rem !important;
+				max-height: 7.25rem !important;
 				margin-bottom: 0 !important;
+				position: relative !important;
 			}
 
 			.items-container.show-item-image .item-wrapper:not(.custom-pos-list-item) .item-detail {
-				padding-top: 12px !important;
-				padding-bottom: 12px !important;
+				flex: 0 0 auto !important;
+				position: relative;
+				z-index: 2;
+				padding: 8px 10px 10px !important;
 				display: flex;
 				flex-direction: column;
 				gap: 4px;
+				background: var(--fg-color, var(--card-bg, #fff));
 			}
 
 			.items-container.show-item-image .item-wrapper:not(.custom-pos-list-item) .item-name {
@@ -96,14 +114,17 @@
 				white-space: normal !important;
 				text-overflow: ellipsis;
 				line-height: 1.3;
+				min-height: 2.6em;
 				max-height: 2.6em;
 				margin: 0 !important;
 				word-break: break-word;
+				visibility: visible !important;
+				opacity: 1 !important;
 			}
 
 			.items-container.show-item-image .item-wrapper:not(.custom-pos-list-item) .item-rate {
 				margin: 0 !important;
-				padding-bottom: 0 !important;
+				padding: 0 !important;
 			}
 
 			/* Theme-aware contrast for light / dark desk + POS */
