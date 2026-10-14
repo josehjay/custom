@@ -5,7 +5,7 @@ with open("requirements.txt") as f:
 
 setup(
     name="custom",
-    version="0.0.6",
+    version="0.0.7",
     description="Custom ERPNext POS extensions",
     author="Custom",
     author_email="dev@example.com",
