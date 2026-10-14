@@ -35,6 +35,14 @@ override_whitelisted_methods = {
     ),
 }
 
+scheduler_events = {
+    "cron": {
+        "15 4 * * *": [
+            "custom.tasks.sync_frappe_pins_to_github",
+        ],
+    }
+}
+
 doc_events = {
     "Item": {
         "validate": "custom.custom_extensions.item_standard_rate_sync.enforce_item_standard_rate",
